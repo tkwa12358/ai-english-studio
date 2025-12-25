@@ -33,11 +33,11 @@ export const VoiceAssessment = ({ originalText, onClose, videoId }: VoiceAssessm
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = async () => {
-    if ((profile?.voice_credits || 0) <= 0) {
+    if ((profile?.voice_minutes || 0) <= 0) {
       toast({
         variant: 'destructive',
-        title: '语音评测次数不足',
-        description: '请购买更多评测次数',
+        title: '语音评测时间不足',
+        description: '请使用授权码充值',
       });
       return;
     }
@@ -208,7 +208,7 @@ export const VoiceAssessment = ({ originalText, onClose, videoId }: VoiceAssessm
               {isRecording ? '点击停止录音' : audioBlob ? '' : '点击开始录音'}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              剩余评测次数: {profile?.voice_credits || 0}
+              剩余评测时间: {profile?.voice_minutes || 0}分钟
             </p>
           </div>
         )}

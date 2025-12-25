@@ -42,7 +42,7 @@ export const Header = () => {
               </Link>
               <div className="flex items-center gap-2 px-3 py-1 border-2 border-foreground">
                 <Mic className="w-4 h-4" />
-                <span className="font-mono">{profile?.voice_credits || 0}</span>
+                <span className="font-mono">{profile?.voice_minutes || 0}分钟</span>
               </div>
               {isAdmin && (
                 <Link to="/admin">
@@ -94,7 +94,7 @@ export const Header = () => {
                 </Link>
                 <div className="flex items-center gap-2 px-3 py-2 border-2 border-foreground">
                   <Mic className="w-4 h-4" />
-                  <span>语音评测次数: {profile?.voice_credits || 0}</span>
+                  <span>语音评测: {profile?.voice_minutes || 0}分钟</span>
                 </div>
                 {isAdmin && (
                   <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>

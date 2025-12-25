@@ -8,11 +8,11 @@ import { Upload, FileVideo, FileText, Play, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { parseSRT, Subtitle } from '@/lib/supabase';
-import Header from '@/components/Header';
-import VideoPlayer from '@/components/VideoPlayer';
-import SubtitleList from '@/components/SubtitleList';
-import VoiceAssessment from '@/components/VoiceAssessment';
-import WordLookup from '@/components/WordLookup';
+import { Header } from '@/components/Header';
+import { VideoPlayer } from '@/components/VideoPlayer';
+import { SubtitleList } from '@/components/SubtitleList';
+import { VoiceAssessment } from '@/components/VoiceAssessment';
+import { WordLookup } from '@/components/WordLookup';
 
 const LocalLearn: React.FC = () => {
   const navigate = useNavigate();
@@ -167,20 +167,21 @@ const LocalLearn: React.FC = () => {
               <div className="lg:col-span-2">
                 <VideoPlayer
                   videoUrl={videoUrl}
-                  subtitles={combinedSubtitles}
-                  onTimeUpdate={handleTimeUpdate}
-                  onVideoRef={(ref) => { videoRef.current = ref; }}
+                  subtitles={subtitlesEn}
+                  subtitlesCn={subtitlesCn}
                   currentSubtitle={currentSubtitle}
-                  onWordClick={handleWordClick}
+                  onTimeUpdate={handleTimeUpdate}
+                  onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
                 />
               </div>
-              <div className="lg:col-span-1">
+              <div className="lg:col-span-1 border-2 border-foreground h-[500px]">
                 <SubtitleList
-                  subtitles={combinedSubtitles}
-                  currentTime={currentTime}
-                  onSeek={handleSeek}
+                  subtitles={subtitlesEn}
+                  subtitlesCn={subtitlesCn}
+                  currentSubtitle={currentSubtitle}
+                  onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
                   onPractice={handlePractice}
-                  onWordClick={handleWordClick}
+                  onAddWord={handleWordClick}
                 />
               </div>
             </div>
