@@ -20,6 +20,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
@@ -34,9 +35,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const checkAdminRole = async () => {
+    const { data, error } = await supabase.rpc('is_admin');
+    if (!error && data) {
+      setIsAdmin(true);
+    } else {
+      setIsAdmin(false);
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
+      await checkAdminRole();
     }
   };
 
@@ -46,6 +57,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+        // 使用 setTimeout 避免死锁
+        setTimeout(() => {
+          checkAdminRole();
+        }, 0);
       }
       setLoading(false);
     });
@@ -55,8 +70,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+        setTimeout(() => {
+          checkAdminRole();
+        }, 0);
       } else {
         setProfile(null);
+        setIsAdmin(false);
       }
     });
 
@@ -108,6 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setIsAdmin(false);
   };
 
   return (
@@ -119,7 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signIn,
       signUp,
       signOut,
-      isAdmin: profile?.role === 'admin',
+      isAdmin,
       refreshProfile
     }}>
       {children}

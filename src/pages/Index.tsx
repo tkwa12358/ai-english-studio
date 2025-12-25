@@ -66,36 +66,74 @@ const Index = () => {
           </div>
         </section>
 
-        {/* Test Code Section */}
+        {/* Test Accounts Section */}
         <section className="py-8">
           <div className="container mx-auto px-4">
-            <Card className="max-w-2xl mx-auto glass border-primary/30">
-              <CardHeader className="text-center">
-                <CardTitle className="flex items-center justify-center gap-2 text-xl">
-                  <Key className="w-5 h-5 text-primary" />
-                  自动化测试授权码
-                </CardTitle>
-                <CardDescription>
-                  点击复制授权码，可获得120分钟语音评测时间（有效期至2025年12月31日）
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-center">
-                <button
-                  onClick={handleCopyCode}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground font-mono text-xl rounded-xl hover:opacity-90 transition-all shadow-lg"
-                >
-                  {testCode}
-                  {copiedCode ? (
-                    <CheckCircle className="w-5 h-5" />
-                  ) : (
-                    <span className="text-sm font-sans">点击复制</span>
+            <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+              {/* Test Code */}
+              <Card className="glass border-primary/30">
+                <CardHeader className="text-center">
+                  <CardTitle className="flex items-center justify-center gap-2 text-xl">
+                    <Key className="w-5 h-5 text-primary" />
+                    自动化测试授权码
+                  </CardTitle>
+                  <CardDescription>
+                    注册后使用，可获得120分钟语音评测时间
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center">
+                  <button
+                    onClick={handleCopyCode}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground font-mono text-lg rounded-xl hover:opacity-90 transition-all shadow-lg"
+                  >
+                    {testCode}
+                    {copiedCode ? (
+                      <CheckCircle className="w-5 h-5" />
+                    ) : (
+                      <span className="text-sm font-sans">复制</span>
+                    )}
+                  </button>
+                  {copiedCode && (
+                    <p className="mt-2 text-sm text-primary">已复制到剪贴板！</p>
                   )}
-                </button>
-                {copiedCode && (
-                  <p className="mt-2 text-sm text-primary">已复制到剪贴板！</p>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {/* Testing Guide */}
+              <Card className="glass border-accent/30">
+                <CardHeader className="text-center">
+                  <CardTitle className="flex items-center justify-center gap-2 text-xl">
+                    <Users className="w-5 h-5 text-accent" />
+                    测试指南
+                  </CardTitle>
+                  <CardDescription>
+                    快速开始测试的步骤
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ol className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                      <span>点击"注册账号"，用任意手机号注册</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                      <span>登录后在个人中心兑换测试授权码</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                      <span>测试后台需先通过数据库添加admin角色</span>
+                    </li>
+                  </ol>
+                  <div className="mt-4 p-3 bg-muted/50 rounded-lg text-xs">
+                    <p className="font-medium mb-1">数据库添加管理员：</p>
+                    <code className="text-primary break-all">
+                      INSERT INTO user_roles (user_id, role) VALUES ('用户UUID', 'admin');
+                    </code>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </section>
 
@@ -269,7 +307,15 @@ const Index = () => {
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-primary" />
+                      user_roles（角色权限）
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-primary" />
                       videos（视频资源）
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-primary" />
+                      learning_progress（学习进度）
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-primary" />
@@ -278,10 +324,6 @@ const Index = () => {
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-primary" />
                       word_book（单词本）
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-primary" />
-                      RLS安全策略
                     </li>
                   </ul>
                 </CardContent>
@@ -338,6 +380,10 @@ const Index = () => {
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-primary" />
                       单词点击查询
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-primary" />
+                      学习进度追踪
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-primary" />
