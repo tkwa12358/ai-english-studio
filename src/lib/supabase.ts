@@ -9,7 +9,7 @@ export type Profile = {
   display_name: string | null;
   avatar_url: string | null;
   role: 'user' | 'admin';
-  voice_credits: number;
+  voice_minutes: number;
   created_at: string;
   updated_at: string;
 };
@@ -67,13 +67,28 @@ export type VoiceAssessment = {
 export type AuthCode = {
   id: string;
   code: string;
-  code_type: 'registration' | 'voice_credits';
+  code_type: '10min' | '60min' | 'registration';
+  minutes_amount: number | null;
   credits_amount: number | null;
   is_used: boolean;
   used_by: string | null;
   used_at: string | null;
   expires_at: string | null;
   created_at: string;
+};
+
+export type VoiceAssessmentModel = {
+  id: string;
+  name: string;
+  provider: string;
+  api_endpoint: string;
+  api_key_secret_name: string | null;
+  model_identifier: string | null;
+  is_active: boolean;
+  priority: number;
+  supports_realtime: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Subtitle = {

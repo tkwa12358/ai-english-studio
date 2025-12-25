@@ -1,1 +1,10 @@
 project_id = "clsbvccuxhcgzvjmmsph"
+
+[functions.voice-assessment]
+verify_jwt = true
+
+[functions.translate]
+verify_jwt = false
+
+[functions.redeem-code]
+verify_jwt = true
