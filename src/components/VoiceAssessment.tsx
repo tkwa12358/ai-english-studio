@@ -104,9 +104,8 @@ export const VoiceAssessment = ({ originalText, onClose, videoId }: VoiceAssessm
         
         const { data, error } = await supabase.functions.invoke('voice-assessment', {
           body: {
-            audio: base64Audio.split(',')[1],
-            originalText,
-            videoId,
+            audio_base64: base64Audio.split(',')[1],
+            original_text: originalText,
           },
         });
 

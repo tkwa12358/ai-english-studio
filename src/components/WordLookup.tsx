@@ -46,8 +46,8 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
           });
 
           // Get translation via edge function
-          const { data: translationData } = await supabase.functions.invoke('translate-word', {
-            body: { word: word.toLowerCase(), context },
+          const { data: translationData } = await supabase.functions.invoke('translate', {
+            body: { text: word.toLowerCase() },
           });
 
           if (translationData?.translation) {
@@ -55,8 +55,8 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
           }
         } else {
           // Fallback: just get translation
-          const { data: translationData } = await supabase.functions.invoke('translate-word', {
-            body: { word: word.toLowerCase(), context },
+          const { data: translationData } = await supabase.functions.invoke('translate', {
+            body: { text: word.toLowerCase() },
           });
 
           setWordInfo({

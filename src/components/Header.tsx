@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { BookOpen, Settings, LogOut, Menu, X, Mic } from 'lucide-react';
+import { BookOpen, Settings, LogOut, Menu, X, Mic, Key } from 'lucide-react';
 import { useState } from 'react';
+import RedeemCode from './RedeemCode';
 
 export const Header = () => {
   const { user, profile, signOut, isAdmin } = useAuth();
@@ -40,10 +41,15 @@ export const Header = () => {
               <Link to="/local-learn">
                 <Button variant="ghost">本地学习</Button>
               </Link>
-              <div className="flex items-center gap-2 px-3 py-1 border-2 border-foreground">
-                <Mic className="w-4 h-4" />
-                <span className="font-mono">{profile?.voice_minutes || 0}分钟</span>
-              </div>
+              <RedeemCode
+                trigger={
+                  <div className="flex items-center gap-2 px-3 py-1 border-2 border-foreground cursor-pointer hover:bg-accent transition-colors">
+                    <Mic className="w-4 h-4" />
+                    <span className="font-mono">{profile?.voice_minutes || 0}分钟</span>
+                    <Key className="w-3 h-3" />
+                  </div>
+                }
+              />
               {isAdmin && (
                 <Link to="/admin">
                   <Button variant="outline">
@@ -92,10 +98,15 @@ export const Header = () => {
                 <Link to="/local-learn" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start">本地学习</Button>
                 </Link>
-                <div className="flex items-center gap-2 px-3 py-2 border-2 border-foreground">
-                  <Mic className="w-4 h-4" />
-                  <span>语音评测: {profile?.voice_minutes || 0}分钟</span>
-                </div>
+                <RedeemCode
+                  trigger={
+                    <div className="flex items-center gap-2 px-3 py-2 border-2 border-foreground cursor-pointer hover:bg-accent transition-colors">
+                      <Mic className="w-4 h-4" />
+                      <span>语音评测: {profile?.voice_minutes || 0}分钟</span>
+                      <Key className="w-3 h-3" />
+                    </div>
+                  }
+                />
                 {isAdmin && (
                   <Link to="/admin" onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="outline" className="w-full justify-start">
