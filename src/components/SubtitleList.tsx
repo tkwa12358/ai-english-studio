@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Subtitle } from '@/lib/supabase';
-import { Play, Mic } from 'lucide-react';
+import { Play, Mic, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SubtitleListProps {
@@ -13,6 +13,7 @@ interface SubtitleListProps {
   onPractice: (subtitle: Subtitle) => void;
   onAddWord: (word: string, context: string) => void;
   showTranslation?: boolean;
+  completedSentences?: number[];
 }
 
 export const SubtitleList = ({
@@ -22,7 +23,8 @@ export const SubtitleList = ({
   onSubtitleClick,
   onPractice,
   onAddWord,
-  showTranslation = true
+  showTranslation = true,
+  completedSentences = []
 }: SubtitleListProps) => {
   const activeRef = useRef<HTMLDivElement>(null);
 
@@ -54,9 +56,10 @@ export const SubtitleList = ({
   return (
     <ScrollArea className="h-full">
       <div className="p-3 space-y-2">
-        {subtitles.map((subtitle) => {
+        {subtitles.map((subtitle, index) => {
           const isActive = currentSubtitle?.id === subtitle.id;
           const translation = getTranslation(subtitle);
+          const isCompleted = completedSentences.includes(index);
           
           return (
             <div
@@ -66,7 +69,9 @@ export const SubtitleList = ({
                 "p-3 rounded-xl transition-all cursor-pointer border-l-4",
                 isActive 
                   ? "bg-primary/10 border-l-primary shadow-sm" 
-                  : "bg-card/50 border-l-transparent hover:bg-accent/30"
+                  : isCompleted
+                    ? "bg-primary/5 border-l-primary/50"
+                    : "bg-card/50 border-l-transparent hover:bg-accent/30"
               )}
               onClick={() => onSubtitleClick(subtitle)}
             >
@@ -76,6 +81,9 @@ export const SubtitleList = ({
                     <span className="text-xs text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">
                       {formatTime(subtitle.start)}
                     </span>
+                    {isCompleted && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
+                    )}
                   </div>
                   <p className="text-sm md:text-base leading-relaxed">
                     {subtitle.text.split(' ').map((word, idx) => (

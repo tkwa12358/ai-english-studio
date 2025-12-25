@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { VideoPlayer } from '@/components/VideoPlayer';
@@ -8,7 +8,8 @@ import { WordLookup } from '@/components/WordLookup';
 import { supabase, Video, Subtitle, parseSRT } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, Eye, EyeOff } from 'lucide-react';
+import { Loader2, ChevronLeft, Eye, EyeOff, Clock, CheckCircle2 } from 'lucide-react';
+import { useLearningProgress } from '@/hooks/useLearningProgress';
 
 const Learn = () => {
   const { videoId } = useParams();
@@ -21,7 +22,21 @@ const Learn = () => {
   const [loading, setLoading] = useState(true);
   const [showTranslation, setShowTranslation] = useState(true);
   const [practiceSubtitle, setPracticeSubtitle] = useState<Subtitle | null>(null);
+  const [practiceSubtitleIndex, setPracticeSubtitleIndex] = useState<number | null>(null);
   const [lookupWord, setLookupWord] = useState<{ word: string; context: string } | null>(null);
+  const lastSaveTimeRef = useRef<number>(0);
+
+  // 学习进度追踪
+  const {
+    progress,
+    startTracking,
+    pauseTracking,
+    savePosition,
+    markSentenceCompleted,
+    completedCount,
+    formatPracticeTime,
+    lastPosition,
+  } = useLearningProgress(selectedVideo?.id || null);
 
   useEffect(() => {
     fetchVideos();
@@ -57,15 +72,57 @@ const Learn = () => {
     }
   };
 
-  const handleTimeUpdate = (time: number) => {
+  const handleTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
     const current = subtitles.find(s => time >= s.start && time <= s.end);
     setCurrentSubtitle(current || null);
-  };
+    
+    // 每30秒自动保存进度
+    const now = Date.now();
+    if (now - lastSaveTimeRef.current > 30000) {
+      savePosition(time);
+      lastSaveTimeRef.current = now;
+    }
+  }, [subtitles, savePosition]);
 
   const handleSubtitleClick = (subtitle: Subtitle) => {
     setCurrentSubtitle(subtitle);
   };
+
+  // 处理视频播放/暂停
+  const handlePlay = useCallback(() => {
+    startTracking();
+  }, [startTracking]);
+
+  const handlePause = useCallback(() => {
+    pauseTracking();
+    savePosition(currentTime);
+  }, [pauseTracking, savePosition, currentTime]);
+
+  // 处理跟读练习
+  const handlePractice = useCallback((subtitle: Subtitle, index: number) => {
+    setPracticeSubtitle(subtitle);
+    setPracticeSubtitleIndex(index);
+  }, []);
+
+  // 评测成功回调
+  const handleAssessmentSuccess = useCallback((score: number) => {
+    if (practiceSubtitleIndex !== null && score >= 60) {
+      markSentenceCompleted(practiceSubtitleIndex);
+    }
+  }, [practiceSubtitleIndex, markSentenceCompleted]);
+
+  // 页面卸载时保存进度
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (selectedVideo) {
+        pauseTracking();
+        savePosition(currentTime);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [selectedVideo, currentTime, pauseTracking, savePosition]);
 
   if (loading) {
     return (
@@ -123,25 +180,43 @@ const Learn = () => {
             // Video Player View
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="lg:w-2/3">
-                <div className="flex items-center gap-2 mb-4">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setSelectedVideo(null)}
-                    className="rounded-xl hover:bg-accent/50"
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    返回
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowTranslation(!showTranslation)}
-                    className="rounded-xl hover:bg-accent/50"
-                  >
-                    {showTranslation ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-                    {showTranslation ? '隐藏翻译' : '显示翻译'}
-                  </Button>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => {
+                        pauseTracking();
+                        savePosition(currentTime);
+                        setSelectedVideo(null);
+                      }}
+                      className="rounded-xl hover:bg-accent/50"
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      返回
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTranslation(!showTranslation)}
+                      className="rounded-xl hover:bg-accent/50"
+                    >
+                      {showTranslation ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+                      {showTranslation ? '隐藏翻译' : '显示翻译'}
+                    </Button>
+                  </div>
+                  
+                  {/* 学习进度指示器 */}
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>{formatPracticeTime()}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4 text-primary" />
+                      <span>{completedCount}/{subtitles.length} 句</span>
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="glass rounded-2xl overflow-hidden">
@@ -163,9 +238,13 @@ const Learn = () => {
                   subtitlesCn={subtitlesCn}
                   currentSubtitle={currentSubtitle}
                   onSubtitleClick={handleSubtitleClick}
-                  onPractice={setPracticeSubtitle}
+                  onPractice={(subtitle) => {
+                    const index = subtitles.findIndex(s => s === subtitle);
+                    handlePractice(subtitle, index);
+                  }}
                   onAddWord={(word, context) => setLookupWord({ word, context })}
                   showTranslation={showTranslation}
+                  completedSentences={progress?.completed_sentences || []}
                 />
               </div>
             </div>
@@ -177,7 +256,11 @@ const Learn = () => {
         <VoiceAssessment
           originalText={practiceSubtitle.text}
           videoId={selectedVideo?.id}
-          onClose={() => setPracticeSubtitle(null)}
+          onClose={() => {
+            setPracticeSubtitle(null);
+            setPracticeSubtitleIndex(null);
+          }}
+          onSuccess={handleAssessmentSuccess}
         />
       )}
 

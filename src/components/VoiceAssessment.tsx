@@ -11,6 +11,7 @@ interface VoiceAssessmentProps {
   originalText: string;
   onClose: () => void;
   videoId?: string;
+  onSuccess?: (score: number) => void;
 }
 
 interface AssessmentResult {
@@ -22,7 +23,7 @@ interface AssessmentResult {
   word_scores?: { word: string; score: number; correct: boolean }[];
 }
 
-export const VoiceAssessment = ({ originalText, onClose, videoId }: VoiceAssessmentProps) => {
+export const VoiceAssessment = ({ originalText, onClose, videoId, onSuccess }: VoiceAssessmentProps) => {
   const { profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -113,6 +114,11 @@ export const VoiceAssessment = ({ originalText, onClose, videoId }: VoiceAssessm
 
         setResult(data);
         await refreshProfile();
+        
+        // 评测成功回调
+        if (onSuccess && data.overall_score) {
+          onSuccess(data.overall_score);
+        }
         
         toast({
           title: '评测完成',
