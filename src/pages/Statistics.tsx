@@ -5,7 +5,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Clock, CheckCircle2, BookOpen, TrendingUp, Calendar, Award } from 'lucide-react';
+import { Loader2, Clock, CheckCircle2, BookOpen, TrendingUp, Award } from 'lucide-react';
+import { LearningCalendar } from '@/components/LearningCalendar';
+
+interface DayActivity {
+  date: string;
+  practiceTime: number;
+  completedSentences: number;
+}
 
 interface LearningStats {
   totalPracticeTime: number;
@@ -13,11 +20,10 @@ interface LearningStats {
   totalWords: number;
   masteredWords: number;
   videosWatched: number;
-  recentActivity: Array<{
-    date: string;
-    practiceTime: number;
-    completedSentences: number;
-  }>;
+  recentActivity: DayActivity[];
+  allActivity: DayActivity[];
+  currentStreak: number;
+  longestStreak: number;
 }
 
 const Statistics = () => {
@@ -54,8 +60,11 @@ const Statistics = () => {
       const totalWords = wordData?.length || 0;
       const masteredWords = wordData?.filter(w => w.mastery_level >= 3).length || 0;
 
-      // 生成最近7天活动数据（基于现有数据模拟）
-      const recentActivity = generateRecentActivity(progressData || []);
+      // 生成活动数据
+      const { recentActivity, allActivity } = generateActivityData(progressData || []);
+      
+      // 计算连续学习天数
+      const { currentStreak, longestStreak } = calculateStreaks(allActivity);
 
       setStats({
         totalPracticeTime,
@@ -64,6 +73,9 @@ const Statistics = () => {
         masteredWords,
         videosWatched,
         recentActivity,
+        allActivity,
+        currentStreak,
+        longestStreak,
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
@@ -72,29 +84,112 @@ const Statistics = () => {
     }
   };
 
-  const generateRecentActivity = (progressData: any[]) => {
-    const activity = [];
+  const generateActivityData = (progressData: any[]) => {
+    const activityMap = new Map<string, DayActivity>();
     const today = new Date();
     
+    // 收集所有有学习记录的日期
+    progressData.forEach(p => {
+      const updateDate = new Date(p.updated_at).toISOString().split('T')[0];
+      const existing = activityMap.get(updateDate) || { date: updateDate, practiceTime: 0, completedSentences: 0 };
+      existing.practiceTime += p.total_practice_time || 0;
+      existing.completedSentences += p.completed_sentences?.length || 0;
+      activityMap.set(updateDate, existing);
+    });
+
+    // 生成最近7天活动数据
+    const recentActivity: DayActivity[] = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      
-      // 检查是否有该日期的更新记录
-      const dayProgress = progressData.filter(p => {
-        const updateDate = new Date(p.updated_at).toISOString().split('T')[0];
-        return updateDate === dateStr;
-      });
-      
-      activity.push({
-        date: dateStr,
-        practiceTime: dayProgress.reduce((sum, p) => sum + (p.total_practice_time || 0), 0),
-        completedSentences: dayProgress.reduce((sum, p) => sum + (p.completed_sentences?.length || 0), 0),
-      });
+      recentActivity.push(activityMap.get(dateStr) || { date: dateStr, practiceTime: 0, completedSentences: 0 });
+    }
+
+    // 生成过去90天活动数据用于日历
+    const allActivity: DayActivity[] = [];
+    for (let i = 89; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      allActivity.push(activityMap.get(dateStr) || { date: dateStr, practiceTime: 0, completedSentences: 0 });
     }
     
-    return activity;
+    return { recentActivity, allActivity };
+  };
+
+  const calculateStreaks = (activity: DayActivity[]) => {
+    // 按日期排序（从最近到最远）
+    const sortedActivity = [...activity].sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let tempStreak = 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // 计算当前连续天数（从今天或昨天开始）
+    let checkDate = new Date(today);
+    let foundTodayOrYesterday = false;
+    
+    for (const day of sortedActivity) {
+      const dayDate = new Date(day.date);
+      dayDate.setHours(0, 0, 0, 0);
+      
+      const diffDays = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (day.practiceTime > 0) {
+        // 如果是今天或昨天有学习记录，开始计算连续天数
+        if (!foundTodayOrYesterday && diffDays <= 1) {
+          foundTodayOrYesterday = true;
+          currentStreak = 1;
+          checkDate = new Date(dayDate);
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else if (foundTodayOrYesterday) {
+          // 检查是否连续
+          const expectedDate = checkDate.toISOString().split('T')[0];
+          if (day.date === expectedDate) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    // 计算最长连续天数
+    let streak = 0;
+    let prevDate: Date | null = null;
+    
+    for (const day of sortedActivity.reverse()) {
+      if (day.practiceTime > 0) {
+        const dayDate = new Date(day.date);
+        
+        if (prevDate === null) {
+          streak = 1;
+        } else {
+          const diffDays = Math.floor((dayDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays === 1) {
+            streak++;
+          } else {
+            longestStreak = Math.max(longestStreak, streak);
+            streak = 1;
+          }
+        }
+        prevDate = dayDate;
+      } else {
+        longestStreak = Math.max(longestStreak, streak);
+        streak = 0;
+        prevDate = null;
+      }
+    }
+    longestStreak = Math.max(longestStreak, streak, currentStreak);
+
+    return { currentStreak, longestStreak };
   };
 
   const formatTime = (seconds: number) => {
@@ -200,8 +295,22 @@ const Statistics = () => {
             </Card>
           </div>
 
-          {/* 详细统计 */}
-          <div className="grid lg:grid-cols-2 gap-6">
+          {/* 学习日历和详细统计 */}
+          <div className="grid lg:grid-cols-2 gap-6 mb-6">
+            {/* 学习日历 */}
+            <Card className="glass border-border/30">
+              <CardHeader>
+                <CardTitle>学习日历 Calendar</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <LearningCalendar 
+                  activityData={stats?.allActivity || []}
+                  currentStreak={stats?.currentStreak || 0}
+                  longestStreak={stats?.longestStreak || 0}
+                />
+              </CardContent>
+            </Card>
+
             {/* 单词掌握度 */}
             <Card className="glass border-border/30">
               <CardHeader>
@@ -234,58 +343,39 @@ const Statistics = () => {
                       <div className="text-xs text-muted-foreground">掌握率</div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            {/* 近7天学习活动 */}
-            <Card className="glass border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  近7天活动 Weekly Activity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {stats?.recentActivity.map((day, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <div className="w-12 text-xs text-muted-foreground">
-                        {formatDate(day.date)}
-                      </div>
-                      <div className="flex-1">
-                        <div 
-                          className="h-6 bg-primary/20 rounded-md flex items-center"
-                          style={{ 
-                            width: `${Math.min(100, (day.practiceTime / 1800) * 100)}%`,
-                            minWidth: day.practiceTime > 0 ? '20px' : '4px'
-                          }}
-                        >
-                          {day.practiceTime > 0 && (
-                            <span className="text-xs px-2 text-primary font-medium">
-                              {Math.floor(day.practiceTime / 60)}分
-                            </span>
-                          )}
+                  {/* 近7天活动 */}
+                  <div className="pt-4 border-t border-border/30">
+                    <h4 className="text-sm font-medium mb-3">近7天学习 Weekly</h4>
+                    <div className="space-y-2">
+                      {stats?.recentActivity.map((day, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <div className="w-10 text-xs text-muted-foreground">
+                            {formatDate(day.date)}
+                          </div>
+                          <div className="flex-1">
+                            <div 
+                              className="h-4 bg-primary/30 rounded-sm"
+                              style={{ 
+                                width: `${Math.min(100, (day.practiceTime / 1800) * 100)}%`,
+                                minWidth: day.practiceTime > 0 ? '8px' : '2px'
+                              }}
+                            />
+                          </div>
+                          <div className="w-12 text-right text-xs text-muted-foreground">
+                            {Math.floor(day.practiceTime / 60)}分
+                          </div>
                         </div>
-                      </div>
-                      <div className="w-16 text-right text-xs text-muted-foreground">
-                        {day.completedSentences} 句
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                
-                <div className="flex justify-between text-xs text-muted-foreground mt-4 pt-4 border-t border-border/30">
-                  <span>日期</span>
-                  <span>学习时长</span>
-                  <span>完成句数</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
           {/* 学习建议 */}
-          <Card className="glass border-border/30 mt-6">
+          <Card className="glass border-border/30">
             <CardHeader>
               <CardTitle>学习建议 Tips</CardTitle>
             </CardHeader>
