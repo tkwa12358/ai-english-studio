@@ -103,28 +103,34 @@ export const SubtitleList = ({
                   )}
                 </div>
                 
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  {/* 播放按钮 */}
                   <Button 
                     variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 rounded-lg hover:bg-primary/10"
+                    size="sm" 
+                    className="h-7 px-2 rounded-lg hover:bg-primary/10 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSubtitleClick(subtitle);
                     }}
+                    title="播放 Play"
                   >
-                    <Play className="w-4 h-4" />
+                    <Play className="w-3.5 h-3.5 mr-1" />
+                    <span className="hidden sm:inline">播放</span>
                   </Button>
+                  {/* 跟读练习按钮 */}
                   <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-8 w-8 rounded-lg hover:bg-accent/50"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 rounded-lg hover:bg-accent/50 text-xs border-primary/30 hover:border-primary"
                     onClick={(e) => {
                       e.stopPropagation();
                       onPractice(subtitle);
                     }}
+                    title="跟读练习 Practice"
                   >
-                    <Mic className="w-4 h-4" />
+                    <Mic className="w-3.5 h-3.5 mr-1 text-primary" />
+                    <span className="hidden sm:inline">跟读</span>
                   </Button>
                 </div>
               </div>

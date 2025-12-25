@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { 
   Play, Pause, SkipBack, SkipForward, 
-  Volume2, VolumeX, RotateCcw, Settings,
-  Repeat
+  Volume2, VolumeX, RotateCcw,
+  Repeat, Languages
 } from 'lucide-react';
 import { Subtitle } from '@/lib/supabase';
 
@@ -16,6 +16,7 @@ interface VideoPlayerProps {
   onTimeUpdate: (time: number) => void;
   onSubtitleClick: (subtitle: Subtitle) => void;
   showTranslation?: boolean;
+  onToggleTranslation?: () => void;
 }
 
 export const VideoPlayer = ({
@@ -25,7 +26,8 @@ export const VideoPlayer = ({
   currentSubtitle,
   onTimeUpdate,
   onSubtitleClick,
-  showTranslation = true
+  showTranslation = true,
+  onToggleTranslation
 }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -206,44 +208,66 @@ export const VideoPlayer = ({
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between flex-wrap gap-2">
+          {/* 左侧：播放控制 */}
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={skipBack}>
+            <Button variant="ghost" size="icon" onClick={skipBack} title="上一句 Previous">
               <SkipBack className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={togglePlay}>
+            <Button variant="ghost" size="icon" onClick={togglePlay} title={isPlaying ? "暂停 Pause" : "播放 Play"}>
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={skipForward}>
+            <Button variant="ghost" size="icon" onClick={skipForward} title="下一句 Next">
               <SkipForward className="w-5 h-5" />
             </Button>
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={() => currentSubtitle && seek(currentSubtitle.start)}
+              title="重播本句 Replay"
             >
               <RotateCcw className="w-5 h-5" />
             </Button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* 右侧：功能控制 */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* 中英切换按钮 - 放在AB循环左侧 */}
+            {onToggleTranslation && (
+              <Button 
+                variant={showTranslation ? "default" : "outline"} 
+                size="sm"
+                onClick={onToggleTranslation}
+                className="text-xs px-2 sm:px-3"
+                title={showTranslation ? "隐藏翻译 Hide Translation" : "显示翻译 Show Translation"}
+              >
+                <Languages className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">{showTranslation ? '中/英' : 'EN'}</span>
+              </Button>
+            )}
+
+            {/* AB循环 */}
             <Button 
-              variant={isLooping ? "default" : "ghost"} 
+              variant={isLooping ? "default" : "outline"} 
               size="sm"
               onClick={isLooping ? clearLoop : setLoopForCurrentSubtitle}
+              className="text-xs px-2 sm:px-3"
+              title={isLooping ? "取消循环 Cancel Loop" : "AB循环 Loop Sentence"}
             >
               <Repeat className="w-4 h-4 mr-1" />
-              {isLooping ? 'AB循环中' : 'AB循环'}
+              <span className="hidden sm:inline">{isLooping ? '循环中' : 'AB'}</span>
             </Button>
             
-            <Button variant="outline" size="sm" onClick={cyclePlaybackRate}>
+            {/* 倍速 */}
+            <Button variant="outline" size="sm" onClick={cyclePlaybackRate} className="text-xs px-2 sm:px-3" title="播放速度 Speed">
               {playbackRate}x
             </Button>
 
+            {/* 音量 */}
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={toggleMute}>
+              <Button variant="ghost" size="icon" onClick={toggleMute} title={isMuted ? "取消静音 Unmute" : "静音 Mute"}>
                 {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </Button>
-              <div className="w-20 hidden sm:block">
+              <div className="w-16 hidden sm:block">
                 <Slider
                   value={[isMuted ? 0 : volume]}
                   max={1}

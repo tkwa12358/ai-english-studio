@@ -8,7 +8,7 @@ import { WordLookup } from '@/components/WordLookup';
 import { supabase, Video, Subtitle, parseSRT } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, Eye, EyeOff, Clock, CheckCircle2 } from 'lucide-react';
+import { Loader2, ChevronLeft, Clock, CheckCircle2 } from 'lucide-react';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
 
 const Learn = () => {
@@ -177,44 +177,57 @@ const Learn = () => {
               )}
             </div>
           ) : (
-            // Video Player View
-            <div className="flex flex-col lg:flex-row gap-6">
-              <div className="lg:w-2/3">
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => {
-                        pauseTracking();
-                        savePosition(currentTime);
-                        setSelectedVideo(null);
-                      }}
-                      className="rounded-xl hover:bg-accent/50"
-                    >
-                      <ChevronLeft className="w-4 h-4 mr-1" />
-                      返回
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowTranslation(!showTranslation)}
-                      className="rounded-xl hover:bg-accent/50"
-                    >
-                      {showTranslation ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-                      {showTranslation ? '隐藏翻译' : '显示翻译'}
-                    </Button>
-                  </div>
+            // Video Player View - PC左右布局，移动端上下布局
+            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+              {/* 顶部导航栏 - 仅显示返回按钮 */}
+              <div className="lg:hidden flex items-center justify-between mb-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    pauseTracking();
+                    savePosition(currentTime);
+                    setSelectedVideo(null);
+                  }}
+                  className="rounded-xl hover:bg-accent/50"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  返回
+                </Button>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{formatPracticeTime()}</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-2" />
+                  <span>{completedCount}/{subtitles.length}</span>
+                </div>
+              </div>
+
+              {/* 左侧视频区域 (PC) / 上方视频区域 (移动端) */}
+              <div className="w-full lg:w-3/5 xl:w-2/3">
+                {/* PC端顶部控制栏 */}
+                <div className="hidden lg:flex items-center justify-between gap-2 mb-3">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      pauseTracking();
+                      savePosition(currentTime);
+                      setSelectedVideo(null);
+                    }}
+                    className="rounded-xl hover:bg-accent/50"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    返回列表
+                  </Button>
                   
-                  {/* 学习进度指示器 */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <Clock className="w-4 h-4" />
                       <span>{formatPracticeTime()}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>{completedCount}/{subtitles.length} 句</span>
+                      <span>{completedCount}/{subtitles.length} 句已完成</span>
                     </div>
                   </div>
                 </div>
@@ -228,11 +241,17 @@ const Learn = () => {
                     onTimeUpdate={handleTimeUpdate}
                     onSubtitleClick={handleSubtitleClick}
                     showTranslation={showTranslation}
+                    onToggleTranslation={() => setShowTranslation(!showTranslation)}
                   />
                 </div>
               </div>
               
-              <div className="lg:w-1/3 glass rounded-2xl h-[400px] lg:h-[600px] overflow-hidden">
+              {/* 右侧字幕列表 (PC) / 下方字幕列表 (移动端) */}
+              <div className="w-full lg:w-2/5 xl:w-1/3 glass rounded-2xl h-[350px] lg:h-[calc(100vh-200px)] lg:max-h-[700px] overflow-hidden flex flex-col">
+                <div className="p-3 border-b border-border/50 flex items-center justify-between">
+                  <span className="text-sm font-medium">字幕列表 Subtitles</span>
+                  <span className="text-xs text-muted-foreground">{subtitles.length} 句</span>
+                </div>
                 <SubtitleList
                   subtitles={subtitles}
                   subtitlesCn={subtitlesCn}
