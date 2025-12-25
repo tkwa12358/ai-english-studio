@@ -23,6 +23,7 @@ export type Database = {
           expires_at: string | null
           id: string
           is_used: boolean
+          minutes_amount: number | null
           used_at: string | null
           used_by: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_used?: boolean
+          minutes_amount?: number | null
           used_at?: string | null
           used_by?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_used?: boolean
+          minutes_amount?: number | null
           used_at?: string | null
           used_by?: string | null
         }
@@ -101,7 +104,7 @@ export type Database = {
           role: string
           updated_at: string
           user_id: string
-          voice_credits: number
+          voice_minutes: number
         }
         Insert: {
           avatar_url?: string | null
@@ -112,7 +115,7 @@ export type Database = {
           role?: string
           updated_at?: string
           user_id: string
-          voice_credits?: number
+          voice_minutes?: number
         }
         Update: {
           avatar_url?: string | null
@@ -123,7 +126,7 @@ export type Database = {
           role?: string
           updated_at?: string
           user_id?: string
-          voice_credits?: number
+          voice_minutes?: number
         }
         Relationships: []
       }
@@ -207,6 +210,48 @@ export type Database = {
           },
         ]
       }
+      voice_assessment_models: {
+        Row: {
+          api_endpoint: string
+          api_key_secret_name: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          model_identifier: string | null
+          name: string
+          priority: number | null
+          provider: string
+          supports_realtime: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          api_endpoint: string
+          api_key_secret_name?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          model_identifier?: string | null
+          name: string
+          priority?: number | null
+          provider: string
+          supports_realtime?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          api_endpoint?: string
+          api_key_secret_name?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          model_identifier?: string | null
+          name?: string
+          priority?: number | null
+          provider?: string
+          supports_realtime?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       voice_assessments: {
         Row: {
           accuracy_score: number | null
@@ -256,6 +301,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      voice_usage_logs: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          model_used: string | null
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          model_used?: string | null
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          model_used?: string | null
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       word_book: {
         Row: {
