@@ -126,7 +126,7 @@ const Register = () => {
                 placeholder="如有授权码请输入"
                 className="border-2 border-foreground"
               />
-              <p className="text-xs text-muted-foreground">授权码可获得额外语音评测次数</p>
+              <p className="text-xs text-muted-foreground">授权码可获得额外语音评测时长</p>
             </div>
 
             <Button 
