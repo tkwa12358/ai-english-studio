@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Subtitle } from '@/lib/supabase';
-import { Play, Mic, BookPlus } from 'lucide-react';
+import { Play, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SubtitleListProps {
@@ -45,7 +45,6 @@ export const SubtitleList = ({
 
   const handleWordClick = (word: string, context: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Clean the word (remove punctuation)
     const cleanWord = word.replace(/[^a-zA-Z'-]/g, '');
     if (cleanWord) {
       onAddWord(cleanWord, context);
@@ -54,7 +53,7 @@ export const SubtitleList = ({
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-2 space-y-1">
+      <div className="p-3 space-y-2">
         {subtitles.map((subtitle) => {
           const isActive = currentSubtitle?.id === subtitle.id;
           const translation = getTranslation(subtitle);
@@ -64,17 +63,17 @@ export const SubtitleList = ({
               key={subtitle.id}
               ref={isActive ? activeRef : null}
               className={cn(
-                "p-3 border-2 transition-all cursor-pointer",
+                "p-3 rounded-xl transition-all cursor-pointer border-l-4",
                 isActive 
-                  ? "border-primary bg-accent shadow-sm" 
-                  : "border-transparent hover:border-muted-foreground/30 hover:bg-muted/50"
+                  ? "bg-primary/10 border-l-primary shadow-sm" 
+                  : "bg-card/50 border-l-transparent hover:bg-accent/30"
               )}
               onClick={() => onSubtitleClick(subtitle)}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs text-muted-foreground font-mono">
+                    <span className="text-xs text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">
                       {formatTime(subtitle.start)}
                     </span>
                   </div>
@@ -82,7 +81,7 @@ export const SubtitleList = ({
                     {subtitle.text.split(' ').map((word, idx) => (
                       <span
                         key={idx}
-                        className="hover:bg-primary hover:text-primary-foreground px-0.5 cursor-pointer transition-colors"
+                        className="hover:bg-primary/20 hover:text-primary px-0.5 rounded cursor-pointer transition-colors"
                         onClick={(e) => handleWordClick(word, subtitle.text, e)}
                       >
                         {word}{' '}
@@ -90,7 +89,7 @@ export const SubtitleList = ({
                     ))}
                   </p>
                   {showTranslation && translation && (
-                    <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1.5">
                       {translation.text}
                     </p>
                   )}
@@ -100,7 +99,7 @@ export const SubtitleList = ({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-8 w-8"
+                    className="h-8 w-8 rounded-lg hover:bg-primary/10"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSubtitleClick(subtitle);
@@ -111,7 +110,7 @@ export const SubtitleList = ({
                   <Button 
                     variant="ghost" 
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-8 w-8 rounded-lg hover:bg-accent/50"
                     onClick={(e) => {
                       e.stopPropagation();
                       onPractice(subtitle);
