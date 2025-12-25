@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, FileVideo, FileText, Play, ArrowLeft } from 'lucide-react';
+import { Upload, FileVideo, FileText, Play, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { parseSRT, Subtitle } from '@/lib/supabase';
@@ -140,24 +140,19 @@ const LocalLearn: React.FC = () => {
     setIsLearning(true);
   }, [videoUrl, subtitlesEn.length, toast]);
 
-  const combinedSubtitles = subtitlesEn.map(sub => ({
-    ...sub,
-    translation: subtitlesCn.find(s => Math.abs(s.start - sub.start) < 1)?.text,
-  }));
-
   if (isLearning) {
     return (
       <>
         <Helmet>
           <title>本地学习 - AI English Club</title>
         </Helmet>
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen gradient-bg dark:gradient-bg-dark">
           <Header />
           <main className="container mx-auto px-4 py-6">
             <Button
               variant="ghost"
               onClick={() => setIsLearning(false)}
-              className="mb-4"
+              className="mb-4 rounded-xl hover:bg-accent/50"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               返回上传
@@ -165,16 +160,18 @@ const LocalLearn: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <VideoPlayer
-                  videoUrl={videoUrl}
-                  subtitles={subtitlesEn}
-                  subtitlesCn={subtitlesCn}
-                  currentSubtitle={currentSubtitle}
-                  onTimeUpdate={handleTimeUpdate}
-                  onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
-                />
+                <div className="glass rounded-2xl overflow-hidden">
+                  <VideoPlayer
+                    videoUrl={videoUrl}
+                    subtitles={subtitlesEn}
+                    subtitlesCn={subtitlesCn}
+                    currentSubtitle={currentSubtitle}
+                    onTimeUpdate={handleTimeUpdate}
+                    onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
+                  />
+                </div>
               </div>
-              <div className="lg:col-span-1 border-2 border-foreground h-[500px]">
+              <div className="lg:col-span-1 glass rounded-2xl h-[500px] overflow-hidden">
                 <SubtitleList
                   subtitles={subtitlesEn}
                   subtitlesCn={subtitlesCn}
@@ -212,52 +209,62 @@ const LocalLearn: React.FC = () => {
         <title>本地学习 - AI English Club</title>
         <meta name="description" content="上传本地视频和字幕文件进行英语学习" />
       </Helmet>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen gradient-bg dark:gradient-bg-dark">
         <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto">
             <Button
               variant="ghost"
               onClick={() => navigate('/learn')}
-              className="mb-6"
+              className="mb-6 rounded-xl hover:bg-accent/50"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               返回在线学习
             </Button>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  本地视频学习
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <div className="glass rounded-2xl p-6 md:p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary/20 to-accent/20 rounded-xl flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold">本地视频学习</h1>
+                  <p className="text-sm text-muted-foreground">上传视频和字幕开始学习</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
                 {/* Video Upload */}
                 <div className="space-y-2">
-                  <Label htmlFor="video">视频文件</Label>
-                  <div className="flex items-center gap-4">
-                    <Input
-                      ref={videoInputRef}
-                      id="video"
-                      type="file"
-                      accept="video/*"
-                      onChange={handleVideoUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => videoInputRef.current?.click()}
-                      className="w-full"
-                    >
-                      <FileVideo className="h-4 w-4 mr-2" />
-                      {videoFile ? videoFile.name : '选择视频文件'}
-                    </Button>
-                  </div>
+                  <Label htmlFor="video" className="text-sm font-medium">视频文件</Label>
+                  <Input
+                    ref={videoInputRef}
+                    id="video"
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => videoInputRef.current?.click()}
+                    className={`w-full h-auto py-4 rounded-xl border-dashed border-2 hover:bg-accent/30 ${videoFile ? 'border-primary bg-primary/5' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {videoFile ? (
+                        <CheckCircle className="h-5 w-5 text-primary" />
+                      ) : (
+                        <FileVideo className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      <span className={videoFile ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                        {videoFile ? videoFile.name : '点击选择视频文件'}
+                      </span>
+                    </div>
+                  </Button>
                   {videoUrl && (
                     <video
                       src={videoUrl}
-                      className="w-full rounded-lg mt-2"
+                      className="w-full rounded-xl mt-3 shadow-md"
                       style={{ maxHeight: '200px' }}
                       controls
                     />
@@ -266,65 +273,79 @@ const LocalLearn: React.FC = () => {
 
                 {/* English SRT Upload */}
                 <div className="space-y-2">
-                  <Label htmlFor="srt-en">英文字幕 (SRT) *必需</Label>
-                  <div className="flex items-center gap-4">
-                    <Input
-                      ref={srtEnInputRef}
-                      id="srt-en"
-                      type="file"
-                      accept=".srt"
-                      onChange={handleSrtEnUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => srtEnInputRef.current?.click()}
-                      className="w-full"
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      {subtitlesEn.length > 0
-                        ? `已加载 ${subtitlesEn.length} 条字幕`
-                        : '选择英文字幕文件'}
-                    </Button>
-                  </div>
+                  <Label htmlFor="srt-en" className="text-sm font-medium">
+                    英文字幕 (SRT) <span className="text-destructive">*必需</span>
+                  </Label>
+                  <Input
+                    ref={srtEnInputRef}
+                    id="srt-en"
+                    type="file"
+                    accept=".srt"
+                    onChange={handleSrtEnUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => srtEnInputRef.current?.click()}
+                    className={`w-full h-auto py-4 rounded-xl border-dashed border-2 hover:bg-accent/30 ${subtitlesEn.length > 0 ? 'border-primary bg-primary/5' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {subtitlesEn.length > 0 ? (
+                        <CheckCircle className="h-5 w-5 text-primary" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      <span className={subtitlesEn.length > 0 ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                        {subtitlesEn.length > 0
+                          ? `已加载 ${subtitlesEn.length} 条字幕`
+                          : '点击选择英文字幕文件'}
+                      </span>
+                    </div>
+                  </Button>
                 </div>
 
                 {/* Chinese SRT Upload */}
                 <div className="space-y-2">
-                  <Label htmlFor="srt-cn">中文字幕 (SRT) 可选</Label>
-                  <div className="flex items-center gap-4">
-                    <Input
-                      ref={srtCnInputRef}
-                      id="srt-cn"
-                      type="file"
-                      accept=".srt"
-                      onChange={handleSrtCnUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => srtCnInputRef.current?.click()}
-                      className="w-full"
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      {subtitlesCn.length > 0
-                        ? `已加载 ${subtitlesCn.length} 条字幕`
-                        : '选择中文字幕文件'}
-                    </Button>
-                  </div>
+                  <Label htmlFor="srt-cn" className="text-sm font-medium">中文字幕 (SRT) <span className="text-muted-foreground text-xs">可选</span></Label>
+                  <Input
+                    ref={srtCnInputRef}
+                    id="srt-cn"
+                    type="file"
+                    accept=".srt"
+                    onChange={handleSrtCnUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => srtCnInputRef.current?.click()}
+                    className={`w-full h-auto py-4 rounded-xl border-dashed border-2 hover:bg-accent/30 ${subtitlesCn.length > 0 ? 'border-primary bg-primary/5' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {subtitlesCn.length > 0 ? (
+                        <CheckCircle className="h-5 w-5 text-primary" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      <span className={subtitlesCn.length > 0 ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                        {subtitlesCn.length > 0
+                          ? `已加载 ${subtitlesCn.length} 条字幕`
+                          : '点击选择中文字幕文件'}
+                      </span>
+                    </div>
+                  </Button>
                 </div>
 
                 <Button
-                  className="w-full"
+                  className="w-full py-6 text-lg rounded-xl bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg"
                   size="lg"
                   onClick={startLearning}
                   disabled={!videoUrl || subtitlesEn.length === 0}
                 >
-                  <Play className="h-4 w-4 mr-2" />
+                  <Play className="h-5 w-5 mr-2" />
                   开始学习
                 </Button>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </main>
       </div>

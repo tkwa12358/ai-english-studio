@@ -69,8 +69,10 @@ const Learn = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="min-h-screen gradient-bg dark:gradient-bg-dark flex items-center justify-center">
+        <div className="glass p-8 rounded-2xl">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
@@ -81,25 +83,27 @@ const Learn = () => {
         <title>{selectedVideo?.title || '视频学习'} - AI English Club</title>
       </Helmet>
       
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="min-h-screen gradient-bg dark:gradient-bg-dark flex flex-col">
         <Header />
         
-        <main className="flex-1 container mx-auto px-4 py-4">
+        <main className="flex-1 container mx-auto px-4 py-6">
           {!selectedVideo ? (
             // Video List
             <div>
               <h1 className="text-2xl font-bold mb-6">选择视频</h1>
               {videos.length === 0 ? (
-                <p className="text-muted-foreground text-center py-12">暂无可用视频</p>
+                <div className="glass p-12 rounded-2xl text-center">
+                  <p className="text-muted-foreground">暂无可用视频</p>
+                </div>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {videos.map(video => (
                     <div
                       key={video.id}
-                      className="border-4 border-foreground bg-card cursor-pointer hover:shadow-md transition-shadow"
+                      className="glass rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all hover:-translate-y-1"
                       onClick={() => selectVideo(video)}
                     >
-                      <div className="aspect-video bg-muted flex items-center justify-center">
+                      <div className="aspect-video bg-muted/50 flex items-center justify-center">
                         {video.thumbnail_url ? (
                           <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
                         ) : (
@@ -107,7 +111,7 @@ const Learn = () => {
                         )}
                       </div>
                       <div className="p-4">
-                        <h3 className="font-bold">{video.title}</h3>
+                        <h3 className="font-bold text-lg mb-1">{video.title}</h3>
                         <p className="text-sm text-muted-foreground truncate">{video.description}</p>
                       </div>
                     </div>
@@ -117,10 +121,15 @@ const Learn = () => {
             </div>
           ) : (
             // Video Player View
-            <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex flex-col lg:flex-row gap-6">
               <div className="lg:w-2/3">
                 <div className="flex items-center gap-2 mb-4">
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedVideo(null)}>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedVideo(null)}
+                    className="rounded-xl hover:bg-accent/50"
+                  >
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     返回
                   </Button>
@@ -128,24 +137,27 @@ const Learn = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowTranslation(!showTranslation)}
+                    className="rounded-xl hover:bg-accent/50"
                   >
                     {showTranslation ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
                     {showTranslation ? '隐藏翻译' : '显示翻译'}
                   </Button>
                 </div>
                 
-                <VideoPlayer
-                  videoUrl={selectedVideo.video_url}
-                  subtitles={subtitles}
-                  subtitlesCn={subtitlesCn}
-                  currentSubtitle={currentSubtitle}
-                  onTimeUpdate={handleTimeUpdate}
-                  onSubtitleClick={handleSubtitleClick}
-                  showTranslation={showTranslation}
-                />
+                <div className="glass rounded-2xl overflow-hidden">
+                  <VideoPlayer
+                    videoUrl={selectedVideo.video_url}
+                    subtitles={subtitles}
+                    subtitlesCn={subtitlesCn}
+                    currentSubtitle={currentSubtitle}
+                    onTimeUpdate={handleTimeUpdate}
+                    onSubtitleClick={handleSubtitleClick}
+                    showTranslation={showTranslation}
+                  />
+                </div>
               </div>
               
-              <div className="lg:w-1/3 border-2 border-foreground h-[400px] lg:h-[600px]">
+              <div className="lg:w-1/3 glass rounded-2xl h-[400px] lg:h-[600px] overflow-hidden">
                 <SubtitleList
                   subtitles={subtitles}
                   subtitlesCn={subtitlesCn}
