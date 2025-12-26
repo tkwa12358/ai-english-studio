@@ -389,6 +389,36 @@ export type Database = {
         }
         Relationships: []
       }
+      word_cache: {
+        Row: {
+          created_at: string
+          definitions: Json | null
+          id: string
+          phonetic: string | null
+          translation: string | null
+          updated_at: string
+          word: string
+        }
+        Insert: {
+          created_at?: string
+          definitions?: Json | null
+          id?: string
+          phonetic?: string | null
+          translation?: string | null
+          updated_at?: string
+          word: string
+        }
+        Update: {
+          created_at?: string
+          definitions?: Json | null
+          id?: string
+          phonetic?: string | null
+          translation?: string | null
+          updated_at?: string
+          word?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

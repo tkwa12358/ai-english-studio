@@ -4,6 +4,7 @@ import { Loader2, Volume2, BookPlus, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { lookupWord } from '@/lib/wordCache';
 
 interface WordLookupProps {
   word: string;
@@ -28,41 +29,19 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
   useEffect(() => {
     const fetchWordInfo = async () => {
       try {
-        // Use Free Dictionary API
-        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          const entry = data[0];
-          
+        const result = await lookupWord(word);
+        if (result) {
           setWordInfo({
-            word: entry.word,
-            phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
-            translation: '', // Will be filled by translation API
-            definitions: entry.meanings?.slice(0, 3).map((m: any) => ({
-              partOfSpeech: m.partOfSpeech,
-              definition: m.definitions?.[0]?.definition || '',
-            })) || [],
+            word: result.word,
+            phonetic: result.phonetic,
+            translation: result.translation,
+            definitions: result.definitions,
           });
-
-          // Get translation via edge function
-          const { data: translationData } = await supabase.functions.invoke('translate', {
-            body: { text: word.toLowerCase() },
-          });
-
-          if (translationData?.translation) {
-            setWordInfo(prev => prev ? { ...prev, translation: translationData.translation } : null);
-          }
         } else {
-          // Fallback: just get translation
-          const { data: translationData } = await supabase.functions.invoke('translate', {
-            body: { text: word.toLowerCase() },
-          });
-
           setWordInfo({
             word,
             phonetic: '',
-            translation: translationData?.translation || '翻译失败',
+            translation: '加载失败',
             definitions: [],
           });
         }
@@ -80,7 +59,7 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
     };
 
     fetchWordInfo();
-  }, [word, context]);
+  }, [word]);
 
   const playPronunciation = () => {
     const utterance = new SpeechSynthesisUtterance(word);
