@@ -10,6 +10,7 @@ import {
   Settings,
   ArrowLeft,
   Cpu,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/admin/users', label: '用户管理', icon: Users },
   { path: '/admin/auth-codes', label: '授权码管理', icon: Key },
   { path: '/admin/models', label: '评测模型', icon: Cpu },
+  { path: '/admin/dictionary', label: '词库管理', icon: BookOpen },
 ];
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
