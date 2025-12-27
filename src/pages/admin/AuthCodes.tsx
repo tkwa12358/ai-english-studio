@@ -70,7 +70,13 @@ const AdminAuthCodes: React.FC = () => {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + data.expires_days);
       
-      const minutesAmount = data.code_type === '60min' ? 60 : 10;
+      // 根据类型确定分钟数
+      let minutesAmount = 0;
+      if (data.code_type === '10min') minutesAmount = 10;
+      else if (data.code_type === '60min') minutesAmount = 60;
+      else if (data.code_type === 'pro_10min') minutesAmount = 10;
+      else if (data.code_type === 'pro_30min') minutesAmount = 30;
+      else if (data.code_type === 'pro_60min') minutesAmount = 60;
       
       for (let i = 0; i < data.count; i++) {
         codes.push({
@@ -152,8 +158,11 @@ const AdminAuthCodes: React.FC = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="10min">10分钟语音时长</SelectItem>
-                      <SelectItem value="60min">60分钟语音时长</SelectItem>
+                      <SelectItem value="10min">普通评测 10分钟</SelectItem>
+                      <SelectItem value="60min">普通评测 60分钟</SelectItem>
+                      <SelectItem value="pro_10min">专业评测 10分钟</SelectItem>
+                      <SelectItem value="pro_30min">专业评测 30分钟</SelectItem>
+                      <SelectItem value="pro_60min">专业评测 60分钟</SelectItem>
                       <SelectItem value="registration">注册授权码</SelectItem>
                     </SelectContent>
                   </Select>
@@ -203,9 +212,12 @@ const AdminAuthCodes: React.FC = () => {
               <TableRow key={code.id}>
                 <TableCell className="font-mono">{code.code}</TableCell>
                 <TableCell>
-                  {code.code_type === '10min' && '10分钟'}
-                  {code.code_type === '60min' && '60分钟'}
-                  {code.code_type === 'registration' && '注册'}
+                  {(code.code_type as string) === '10min' && '普通 10分钟'}
+                  {(code.code_type as string) === '60min' && '普通 60分钟'}
+                  {(code.code_type as string) === 'pro_10min' && '专业 10分钟'}
+                  {(code.code_type as string) === 'pro_30min' && '专业 30分钟'}
+                  {(code.code_type as string) === 'pro_60min' && '专业 60分钟'}
+                  {(code.code_type as string) === 'registration' && '注册'}
                 </TableCell>
                 <TableCell>{code.minutes_amount || '-'} 分钟</TableCell>
                 <TableCell>

@@ -4,6 +4,8 @@ import { Header } from '@/components/Header';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { SubtitleList } from '@/components/SubtitleList';
 import { VoiceAssessment } from '@/components/VoiceAssessment';
+import { ProfessionalAssessment } from '@/components/ProfessionalAssessment';
+import { AssessmentSelector } from '@/components/AssessmentSelector';
 import { WordLookup } from '@/components/WordLookup';
 import { supabase, Video, Subtitle, parseSRT } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
@@ -23,6 +25,8 @@ const Learn = () => {
   const [showTranslation, setShowTranslation] = useState(true);
   const [practiceSubtitle, setPracticeSubtitle] = useState<Subtitle | null>(null);
   const [practiceSubtitleIndex, setPracticeSubtitleIndex] = useState<number | null>(null);
+  const [showAssessmentSelector, setShowAssessmentSelector] = useState(false);
+  const [assessmentMode, setAssessmentMode] = useState<'normal' | 'professional' | null>(null);
   const [lookupWord, setLookupWord] = useState<{ word: string; context: string } | null>(null);
   const lastSaveTimeRef = useRef<number>(0);
 
@@ -99,10 +103,21 @@ const Learn = () => {
     savePosition(currentTime);
   }, [pauseTracking, savePosition, currentTime]);
 
-  // 处理跟读练习
+  // 处理跟读练习 - 显示选择器
   const handlePractice = useCallback((subtitle: Subtitle, index: number) => {
     setPracticeSubtitle(subtitle);
     setPracticeSubtitleIndex(index);
+    setShowAssessmentSelector(true);
+  }, []);
+
+  // 选择普通评测
+  const handleSelectNormalAssessment = useCallback(() => {
+    setAssessmentMode('normal');
+  }, []);
+
+  // 选择专业评测
+  const handleSelectProfessionalAssessment = useCallback(() => {
+    setAssessmentMode('professional');
   }, []);
 
   // 评测成功回调
@@ -271,13 +286,43 @@ const Learn = () => {
         </main>
       </div>
 
-      {practiceSubtitle && (
+      {/* 评测模式选择器 */}
+      <AssessmentSelector
+        open={showAssessmentSelector}
+        onOpenChange={(open) => {
+          setShowAssessmentSelector(open);
+          if (!open && !assessmentMode) {
+            setPracticeSubtitle(null);
+            setPracticeSubtitleIndex(null);
+          }
+        }}
+        onSelectNormal={handleSelectNormalAssessment}
+        onSelectProfessional={handleSelectProfessionalAssessment}
+      />
+
+      {/* 普通评测 */}
+      {practiceSubtitle && assessmentMode === 'normal' && (
         <VoiceAssessment
           originalText={practiceSubtitle.text}
           videoId={selectedVideo?.id}
           onClose={() => {
             setPracticeSubtitle(null);
             setPracticeSubtitleIndex(null);
+            setAssessmentMode(null);
+          }}
+          onSuccess={handleAssessmentSuccess}
+        />
+      )}
+
+      {/* 专业评测 */}
+      {practiceSubtitle && assessmentMode === 'professional' && (
+        <ProfessionalAssessment
+          originalText={practiceSubtitle.text}
+          videoId={selectedVideo?.id}
+          onClose={() => {
+            setPracticeSubtitle(null);
+            setPracticeSubtitleIndex(null);
+            setAssessmentMode(null);
           }}
           onSuccess={handleAssessmentSuccess}
         />
