@@ -308,27 +308,55 @@ const AdminProfessionalProviders: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                     placeholder="例如: eastasia, ap-guangzhou"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {formData.provider_type === 'azure' && '推荐: eastasia (东亚), southeastasia (东南亚)'}
+                    {formData.provider_type === 'tencent_soe' && '推荐: ap-guangzhou, ap-shanghai, ap-beijing'}
+                    {formData.provider_type === 'ifly' && '讯飞无需配置区域'}
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="api_key_secret_name">API Key Secret 名称</Label>
+                  <Label htmlFor="api_key_secret_name">
+                    {formData.provider_type === 'azure' && 'Azure 订阅密钥 (Subscription Key)'}
+                    {formData.provider_type === 'tencent_soe' && '腾讯云 SecretId'}
+                    {formData.provider_type === 'ifly' && '讯飞 AppId'}
+                  </Label>
                   <Input
                     id="api_key_secret_name"
                     value={formData.api_key_secret_name}
                     onChange={(e) => setFormData({ ...formData, api_key_secret_name: e.target.value })}
-                    placeholder="例如: AZURE_SPEECH_KEY"
+                    placeholder={
+                      formData.provider_type === 'azure' ? 'AZURE_SPEECH_KEY' :
+                      formData.provider_type === 'tencent_soe' ? 'TENCENT_SOE_SECRET_ID' :
+                      'IFLY_APP_ID'
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
-                    在 Supabase Secrets 中配置的密钥名称
+                    {formData.provider_type === 'azure' && '在 Azure Portal → Speech Services → Keys 获取'}
+                    {formData.provider_type === 'tencent_soe' && '在腾讯云控制台 → 访问管理 → API密钥管理 获取'}
+                    {formData.provider_type === 'ifly' && '在讯飞开放平台 → 控制台 → 应用管理 获取'}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="api_secret_key_name">第二 Secret 名称 (如需要)</Label>
+                  <Label htmlFor="api_secret_key_name">
+                    {formData.provider_type === 'azure' && '(Azure 只需一个密钥，此项留空)'}
+                    {formData.provider_type === 'tencent_soe' && '腾讯云 SecretKey'}
+                    {formData.provider_type === 'ifly' && '讯飞 APIKey'}
+                  </Label>
                   <Input
                     id="api_secret_key_name"
                     value={formData.api_secret_key_name}
                     onChange={(e) => setFormData({ ...formData, api_secret_key_name: e.target.value })}
-                    placeholder="例如: TENCENT_SOE_SECRET_KEY"
+                    placeholder={
+                      formData.provider_type === 'azure' ? '' :
+                      formData.provider_type === 'tencent_soe' ? 'TENCENT_SOE_SECRET_KEY' :
+                      'IFLY_API_KEY'
+                    }
+                    disabled={formData.provider_type === 'azure'}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {formData.provider_type === 'tencent_soe' && '与 SecretId 一起在腾讯云 API密钥管理 获取'}
+                    {formData.provider_type === 'ifly' && '在讯飞开放平台应用详情页获取'}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="priority">优先级</Label>
