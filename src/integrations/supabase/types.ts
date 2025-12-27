@@ -94,6 +94,138 @@ export type Database = {
           },
         ]
       }
+      professional_assessment_providers: {
+        Row: {
+          api_endpoint: string
+          api_key_secret_name: string | null
+          api_secret_key_name: string | null
+          config_json: Json | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          priority: number | null
+          provider_type: string
+          region: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_endpoint: string
+          api_key_secret_name?: string | null
+          api_secret_key_name?: string | null
+          config_json?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          priority?: number | null
+          provider_type: string
+          region?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_endpoint?: string
+          api_key_secret_name?: string | null
+          api_secret_key_name?: string | null
+          config_json?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          priority?: number | null
+          provider_type?: string
+          region?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      professional_assessments: {
+        Row: {
+          accuracy_score: number | null
+          billing_error: string | null
+          completeness_score: number | null
+          created_at: string
+          duration_seconds: number | null
+          feedback: string | null
+          fluency_score: number | null
+          id: string
+          is_billed: boolean | null
+          minutes_charged: number | null
+          original_text: string
+          overall_score: number | null
+          phonemes_result: Json | null
+          pronunciation_score: number | null
+          provider_id: string | null
+          provider_name: string
+          raw_response: Json | null
+          user_id: string
+          video_id: string | null
+          words_result: Json | null
+        }
+        Insert: {
+          accuracy_score?: number | null
+          billing_error?: string | null
+          completeness_score?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          feedback?: string | null
+          fluency_score?: number | null
+          id?: string
+          is_billed?: boolean | null
+          minutes_charged?: number | null
+          original_text: string
+          overall_score?: number | null
+          phonemes_result?: Json | null
+          pronunciation_score?: number | null
+          provider_id?: string | null
+          provider_name: string
+          raw_response?: Json | null
+          user_id: string
+          video_id?: string | null
+          words_result?: Json | null
+        }
+        Update: {
+          accuracy_score?: number | null
+          billing_error?: string | null
+          completeness_score?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          feedback?: string | null
+          fluency_score?: number | null
+          id?: string
+          is_billed?: boolean | null
+          minutes_charged?: number | null
+          original_text?: string
+          overall_score?: number | null
+          phonemes_result?: Json | null
+          pronunciation_score?: number | null
+          provider_id?: string | null
+          provider_name?: string
+          raw_response?: Json | null
+          user_id?: string
+          video_id?: string | null
+          words_result?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_assessments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "professional_assessment_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_assessments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -101,6 +233,7 @@ export type Database = {
           display_name: string | null
           id: string
           phone: string | null
+          professional_voice_minutes: number | null
           role: string
           updated_at: string
           user_id: string
@@ -112,6 +245,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           phone?: string | null
+          professional_voice_minutes?: number | null
           role?: string
           updated_at?: string
           user_id: string
@@ -123,6 +257,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           phone?: string | null
+          professional_voice_minutes?: number | null
           role?: string
           updated_at?: string
           user_id?: string

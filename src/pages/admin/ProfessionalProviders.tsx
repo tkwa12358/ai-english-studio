@@ -1,0 +1,463 @@
+import React, { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Plus, Pencil, Trash2, Crown, Star } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
+import AdminLayout from '@/components/admin/AdminLayout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+const PROVIDER_TYPES = [
+  { value: 'azure', label: '微软 Azure Speech', description: '专业发音评测，支持音素级评分' },
+  { value: 'tencent_soe', label: '腾讯 SOE 智能评测', description: '智能口语评测，适合中英文' },
+  { value: 'ifly', label: '讯飞语音评测', description: '国内领先的语音评测' },
+];
+
+interface Provider {
+  id: string;
+  name: string;
+  provider_type: string;
+  api_endpoint: string;
+  api_key_secret_name: string | null;
+  api_secret_key_name: string | null;
+  region: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  priority: number;
+  config_json: Record<string, unknown>;
+  created_at: string;
+}
+
+const AdminProfessionalProviders: React.FC = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    provider_type: 'azure',
+    api_endpoint: '',
+    api_key_secret_name: '',
+    api_secret_key_name: '',
+    region: '',
+    is_active: true,
+    is_default: false,
+    priority: 0,
+  });
+
+  const { data: providers = [] } = useQuery({
+    queryKey: ['admin-professional-providers'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('professional_assessment_providers')
+        .select('*')
+        .order('priority', { ascending: false });
+      return data as Provider[];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const { error } = await supabase.from('professional_assessment_providers').insert({
+        ...data,
+        api_key_secret_name: data.api_key_secret_name || null,
+        api_secret_key_name: data.api_secret_key_name || null,
+        region: data.region || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
+      toast({ title: '服务商配置创建成功' });
+      setIsOpen(false);
+      resetForm();
+    },
+    onError: (error) => {
+      toast({ title: '创建失败', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      const { error } = await supabase
+        .from('professional_assessment_providers')
+        .update({
+          ...data,
+          api_key_secret_name: data.api_key_secret_name || null,
+          api_secret_key_name: data.api_secret_key_name || null,
+          region: data.region || null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
+      toast({ title: '服务商配置更新成功' });
+      setIsOpen(false);
+      resetForm();
+    },
+    onError: (error) => {
+      toast({ title: '更新失败', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('professional_assessment_providers').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
+      toast({ title: '服务商配置删除成功' });
+    },
+    onError: (error) => {
+      toast({ title: '删除失败', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const setDefaultMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // 先取消所有默认
+      await supabase
+        .from('professional_assessment_providers')
+        .update({ is_default: false })
+        .neq('id', id);
+      // 设置新默认
+      const { error } = await supabase
+        .from('professional_assessment_providers')
+        .update({ is_default: true })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
+      toast({ title: '已设为默认服务商' });
+    },
+  });
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      provider_type: 'azure',
+      api_endpoint: '',
+      api_key_secret_name: '',
+      api_secret_key_name: '',
+      region: '',
+      is_active: true,
+      is_default: false,
+      priority: 0,
+    });
+    setEditingProvider(null);
+  };
+
+  const handleEdit = (provider: Provider) => {
+    setEditingProvider(provider);
+    setFormData({
+      name: provider.name,
+      provider_type: provider.provider_type,
+      api_endpoint: provider.api_endpoint,
+      api_key_secret_name: provider.api_key_secret_name || '',
+      api_secret_key_name: provider.api_secret_key_name || '',
+      region: provider.region || '',
+      is_active: provider.is_active,
+      is_default: provider.is_default,
+      priority: provider.priority,
+    });
+    setIsOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingProvider) {
+      updateMutation.mutate({ id: editingProvider.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const getProviderDefaults = (type: string) => {
+    switch (type) {
+      case 'azure':
+        return {
+          api_endpoint: 'https://{region}.stt.speech.microsoft.com',
+          api_key_secret_name: 'AZURE_SPEECH_KEY',
+          region: 'eastasia',
+        };
+      case 'tencent_soe':
+        return {
+          api_endpoint: 'https://soe.tencentcloudapi.com',
+          api_key_secret_name: 'TENCENT_SOE_SECRET_ID',
+          api_secret_key_name: 'TENCENT_SOE_SECRET_KEY',
+          region: 'ap-guangzhou',
+        };
+      case 'ifly':
+        return {
+          api_endpoint: 'https://api.xfyun.cn',
+          api_key_secret_name: 'IFLY_APP_ID',
+          api_secret_key_name: 'IFLY_API_KEY',
+          region: '',
+        };
+      default:
+        return {};
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <Helmet>
+        <title>专业评测服务商 - 管理后台</title>
+      </Helmet>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Crown className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">专业评测服务商配置</h1>
+          </div>
+          <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                添加服务商
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{editingProvider ? '编辑服务商' : '添加服务商'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">服务商名称</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="例如: Azure 英语评测"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider_type">服务类型</Label>
+                  <Select
+                    value={formData.provider_type}
+                    onValueChange={(value) => {
+                      const defaults = getProviderDefaults(value);
+                      setFormData({ 
+                        ...formData, 
+                        provider_type: value,
+                        ...defaults,
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROVIDER_TYPES.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          <div>
+                            <div>{p.label}</div>
+                            <div className="text-xs text-muted-foreground">{p.description}</div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api_endpoint">API 端点</Label>
+                  <Input
+                    id="api_endpoint"
+                    value={formData.api_endpoint}
+                    onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="region">区域 (Region)</Label>
+                  <Input
+                    id="region"
+                    value={formData.region}
+                    onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                    placeholder="例如: eastasia, ap-guangzhou"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api_key_secret_name">API Key Secret 名称</Label>
+                  <Input
+                    id="api_key_secret_name"
+                    value={formData.api_key_secret_name}
+                    onChange={(e) => setFormData({ ...formData, api_key_secret_name: e.target.value })}
+                    placeholder="例如: AZURE_SPEECH_KEY"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    在 Supabase Secrets 中配置的密钥名称
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api_secret_key_name">第二 Secret 名称 (如需要)</Label>
+                  <Input
+                    id="api_secret_key_name"
+                    value={formData.api_secret_key_name}
+                    onChange={(e) => setFormData({ ...formData, api_secret_key_name: e.target.value })}
+                    placeholder="例如: TENCENT_SOE_SECRET_KEY"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">优先级</Label>
+                  <Input
+                    id="priority"
+                    type="number"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_active"
+                    checked={formData.is_active}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                  />
+                  <Label htmlFor="is_active">启用</Label>
+                </div>
+                <Button type="submit" className="w-full">
+                  {editingProvider ? '保存' : '创建'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>配置说明</CardTitle>
+            <CardDescription>
+              专业评测使用独立的时间配额，与普通评测分开计费。用户需要购买专业评测授权码才能使用。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="border-2 border-border p-4">
+                <h4 className="font-bold mb-2">微软 Azure</h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>• Secret: AZURE_SPEECH_KEY</li>
+                  <li>• 区域: eastasia (推荐)</li>
+                  <li>• 支持音素级评分</li>
+                </ul>
+              </div>
+              <div className="border-2 border-border p-4">
+                <h4 className="font-bold mb-2">腾讯 SOE</h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>• Secret: TENCENT_SOE_SECRET_ID</li>
+                  <li>• Secret: TENCENT_SOE_SECRET_KEY</li>
+                  <li>• 区域: ap-guangzhou</li>
+                </ul>
+              </div>
+              <div className="border-2 border-border p-4">
+                <h4 className="font-bold mb-2">讯飞评测</h4>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>• Secret: IFLY_APP_ID</li>
+                  <li>• Secret: IFLY_API_KEY</li>
+                  <li>• 暂不支持</li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>区域</TableHead>
+              <TableHead>优先级</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>默认</TableHead>
+              <TableHead>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {providers.map((provider) => (
+              <TableRow key={provider.id}>
+                <TableCell className="font-medium">{provider.name}</TableCell>
+                <TableCell>
+                  {PROVIDER_TYPES.find((p) => p.value === provider.provider_type)?.label || provider.provider_type}
+                </TableCell>
+                <TableCell>{provider.region || '-'}</TableCell>
+                <TableCell>{provider.priority}</TableCell>
+                <TableCell>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs ${
+                      provider.is_active
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {provider.is_active ? '启用' : '禁用'}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {provider.is_default ? (
+                    <Star className="h-4 w-4 text-primary fill-primary" />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDefaultMutation.mutate(provider.id)}
+                    >
+                      设为默认
+                    </Button>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(provider)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteMutation.mutate(provider.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </AdminLayout>
+  );
+};
+
+export default AdminProfessionalProviders;

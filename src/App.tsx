@@ -20,6 +20,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminAuthCodes from "./pages/admin/AuthCodes";
 import AdminModels from "./pages/admin/Models";
 import AdminDictionary from "./pages/admin/Dictionary";
+import AdminProfessionalProviders from "./pages/admin/ProfessionalProviders";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ const AppRoutes = () => (
     <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
     <Route path="/admin/auth-codes" element={<AdminRoute><AdminAuthCodes /></AdminRoute>} />
     <Route path="/admin/models" element={<AdminRoute><AdminModels /></AdminRoute>} />
+    <Route path="/admin/professional" element={<AdminRoute><AdminProfessionalProviders /></AdminRoute>} />
     <Route path="/admin/dictionary" element={<AdminRoute><AdminDictionary /></AdminRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
