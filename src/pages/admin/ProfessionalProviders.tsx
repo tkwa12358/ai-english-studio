@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
+import type { Json } from '@/integrations/supabase/types';
 import {
   Table,
   TableBody,
@@ -51,7 +51,11 @@ interface Provider {
   is_active: boolean;
   is_default: boolean;
   priority: number;
-  config_json: Record<string, unknown>;
+  config_json: {
+    api_key?: string;
+    api_secret?: string;
+    [key: string]: unknown;
+  };
   created_at: string;
 }
 
@@ -64,8 +68,8 @@ const AdminProfessionalProviders: React.FC = () => {
     name: '',
     provider_type: 'azure',
     api_endpoint: '',
-    api_key_secret_name: '',
-    api_secret_key_name: '',
+    api_key: '', // 直接输入的 API Key
+    api_secret: '', // 直接输入的 API Secret (腾讯/讯飞需要)
     region: '',
     is_active: true,
     is_default: false,
@@ -85,12 +89,21 @@ const AdminProfessionalProviders: React.FC = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase.from('professional_assessment_providers').insert({
-        ...data,
-        api_key_secret_name: data.api_key_secret_name || null,
-        api_secret_key_name: data.api_secret_key_name || null,
+      // 将 API Key 存储到 config_json 中，不在表单数据中暴露
+      const configJson: { api_key?: string; api_secret?: string } = {};
+      if (data.api_key) configJson.api_key = data.api_key;
+      if (data.api_secret) configJson.api_secret = data.api_secret;
+      
+      const { error } = await supabase.from('professional_assessment_providers').insert([{
+        name: data.name,
+        provider_type: data.provider_type,
+        api_endpoint: data.api_endpoint,
         region: data.region || null,
-      });
+        is_active: data.is_active,
+        is_default: data.is_default,
+        priority: data.priority,
+        config_json: configJson,
+      }]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -106,14 +119,39 @@ const AdminProfessionalProviders: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      // 构建更新对象
+      interface UpdatePayload {
+        name: string;
+        provider_type: string;
+        api_endpoint: string;
+        region: string | null;
+        is_active: boolean;
+        is_default: boolean;
+        priority: number;
+        config_json?: Json;
+      }
+      
+      const updateData: UpdatePayload = {
+        name: data.name,
+        provider_type: data.provider_type,
+        api_endpoint: data.api_endpoint,
+        region: data.region || null,
+        is_active: data.is_active,
+        is_default: data.is_default,
+        priority: data.priority,
+      };
+      
+      // 如果输入了新的 API Key，更新 config_json
+      if (data.api_key || data.api_secret) {
+        const configJson: { api_key?: string; api_secret?: string } = {};
+        if (data.api_key) configJson.api_key = data.api_key;
+        if (data.api_secret) configJson.api_secret = data.api_secret;
+        updateData.config_json = configJson;
+      }
+      
       const { error } = await supabase
         .from('professional_assessment_providers')
-        .update({
-          ...data,
-          api_key_secret_name: data.api_key_secret_name || null,
-          api_secret_key_name: data.api_secret_key_name || null,
-          region: data.region || null,
-        })
+        .update(updateData)
         .eq('id', id);
       if (error) throw error;
     },
@@ -167,8 +205,8 @@ const AdminProfessionalProviders: React.FC = () => {
       name: '',
       provider_type: 'azure',
       api_endpoint: '',
-      api_key_secret_name: '',
-      api_secret_key_name: '',
+      api_key: '',
+      api_secret: '',
       region: '',
       is_active: true,
       is_default: false,
@@ -183,8 +221,8 @@ const AdminProfessionalProviders: React.FC = () => {
       name: provider.name,
       provider_type: provider.provider_type,
       api_endpoint: provider.api_endpoint,
-      api_key_secret_name: provider.api_key_secret_name || '',
-      api_secret_key_name: provider.api_secret_key_name || '',
+      api_key: '', // 编辑时不显示已存储的密钥，留空表示不修改
+      api_secret: '',
       region: provider.region || '',
       is_active: provider.is_active,
       is_default: provider.is_default,
@@ -315,20 +353,17 @@ const AdminProfessionalProviders: React.FC = () => {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="api_key_secret_name">
+                  <Label htmlFor="api_key">
                     {formData.provider_type === 'azure' && 'Azure 订阅密钥 (Subscription Key)'}
                     {formData.provider_type === 'tencent_soe' && '腾讯云 SecretId'}
                     {formData.provider_type === 'ifly' && '讯飞 AppId'}
                   </Label>
                   <Input
-                    id="api_key_secret_name"
-                    value={formData.api_key_secret_name}
-                    onChange={(e) => setFormData({ ...formData, api_key_secret_name: e.target.value })}
-                    placeholder={
-                      formData.provider_type === 'azure' ? 'AZURE_SPEECH_KEY' :
-                      formData.provider_type === 'tencent_soe' ? 'TENCENT_SOE_SECRET_ID' :
-                      'IFLY_APP_ID'
-                    }
+                    id="api_key"
+                    type="password"
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    placeholder={editingProvider ? '留空表示不修改' : '请输入 API 密钥'}
                   />
                   <p className="text-xs text-muted-foreground">
                     {formData.provider_type === 'azure' && '在 Azure Portal → Speech Services → Keys 获取'}
@@ -337,19 +372,19 @@ const AdminProfessionalProviders: React.FC = () => {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="api_secret_key_name">
+                  <Label htmlFor="api_secret">
                     {formData.provider_type === 'azure' && '(Azure 只需一个密钥，此项留空)'}
                     {formData.provider_type === 'tencent_soe' && '腾讯云 SecretKey'}
                     {formData.provider_type === 'ifly' && '讯飞 APIKey'}
                   </Label>
                   <Input
-                    id="api_secret_key_name"
-                    value={formData.api_secret_key_name}
-                    onChange={(e) => setFormData({ ...formData, api_secret_key_name: e.target.value })}
+                    id="api_secret"
+                    type="password"
+                    value={formData.api_secret}
+                    onChange={(e) => setFormData({ ...formData, api_secret: e.target.value })}
                     placeholder={
                       formData.provider_type === 'azure' ? '' :
-                      formData.provider_type === 'tencent_soe' ? 'TENCENT_SOE_SECRET_KEY' :
-                      'IFLY_API_KEY'
+                      editingProvider ? '留空表示不修改' : '请输入 API Secret'
                     }
                     disabled={formData.provider_type === 'azure'}
                   />
@@ -387,7 +422,7 @@ const AdminProfessionalProviders: React.FC = () => {
           <CardHeader>
             <CardTitle>配置说明</CardTitle>
             <CardDescription>
-              专业评测使用独立的时间配额，与普通评测分开计费。用户需要购买专业评测授权码才能使用。
+              在添加服务商时直接输入 API 密钥，密钥将安全存储并仅供评测服务使用。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -395,24 +430,24 @@ const AdminProfessionalProviders: React.FC = () => {
               <div className="border-2 border-border p-4">
                 <h4 className="font-bold mb-2">微软 Azure</h4>
                 <ul className="space-y-1 text-muted-foreground">
-                  <li>• Secret: AZURE_SPEECH_KEY</li>
-                  <li>• 区域: eastasia (推荐)</li>
+                  <li>• 获取位置: Azure Portal → Speech Services → Keys</li>
+                  <li>• 推荐区域: eastasia</li>
                   <li>• 支持音素级评分</li>
                 </ul>
               </div>
               <div className="border-2 border-border p-4">
                 <h4 className="font-bold mb-2">腾讯 SOE</h4>
                 <ul className="space-y-1 text-muted-foreground">
-                  <li>• Secret: TENCENT_SOE_SECRET_ID</li>
-                  <li>• Secret: TENCENT_SOE_SECRET_KEY</li>
-                  <li>• 区域: ap-guangzhou</li>
+                  <li>• 获取位置: 腾讯云 → API密钥管理</li>
+                  <li>• 需要 SecretId 和 SecretKey</li>
+                  <li>• 推荐区域: ap-guangzhou</li>
                 </ul>
               </div>
               <div className="border-2 border-border p-4">
                 <h4 className="font-bold mb-2">讯飞评测</h4>
                 <ul className="space-y-1 text-muted-foreground">
-                  <li>• Secret: IFLY_APP_ID</li>
-                  <li>• Secret: IFLY_API_KEY</li>
+                  <li>• 获取位置: 讯飞开放平台 → 应用管理</li>
+                  <li>• 需要 AppId 和 APIKey</li>
                   <li>• 暂不支持</li>
                 </ul>
               </div>

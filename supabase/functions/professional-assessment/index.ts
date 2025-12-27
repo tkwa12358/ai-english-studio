@@ -21,7 +21,11 @@ interface ProviderConfig {
   api_key_secret_name: string | null;
   api_secret_key_name: string | null;
   region: string | null;
-  config_json: Record<string, unknown>;
+  config_json: {
+    api_key?: string;
+    api_secret?: string;
+    [key: string]: unknown;
+  };
 }
 
 interface AssessmentResult {
@@ -55,11 +59,13 @@ async function callAzureAssessment(
   original_text: string,
   language: string
 ): Promise<AssessmentResult> {
-  const subscriptionKey = Deno.env.get(provider.api_key_secret_name || 'AZURE_SPEECH_KEY');
+  // 优先从 config_json 读取密钥，其次从环境变量
+  const subscriptionKey = provider.config_json?.api_key || 
+    Deno.env.get(provider.api_key_secret_name || 'AZURE_SPEECH_KEY');
   const region = provider.region || 'eastasia';
   
   if (!subscriptionKey) {
-    throw new Error('Azure Speech API 密钥未配置');
+    throw new Error('Azure Speech API 密钥未配置，请在管理后台设置');
   }
 
   // 将 webm 音频转换为 WAV 格式的 base64（Azure 需要 WAV 格式）
@@ -159,11 +165,14 @@ async function callTencentSOEAssessment(
   original_text: string,
   language: string
 ): Promise<AssessmentResult> {
-  const secretId = Deno.env.get(provider.api_key_secret_name || 'TENCENT_SOE_SECRET_ID');
-  const secretKey = Deno.env.get(provider.api_secret_key_name || 'TENCENT_SOE_SECRET_KEY');
+  // 优先从 config_json 读取密钥，其次从环境变量
+  const secretId = provider.config_json?.api_key || 
+    Deno.env.get(provider.api_key_secret_name || 'TENCENT_SOE_SECRET_ID');
+  const secretKey = provider.config_json?.api_secret || 
+    Deno.env.get(provider.api_secret_key_name || 'TENCENT_SOE_SECRET_KEY');
   
   if (!secretId || !secretKey) {
-    throw new Error('腾讯 SOE API 密钥未配置');
+    throw new Error('腾讯 SOE API 密钥未配置，请在管理后台设置');
   }
 
   const host = "soe.tencentcloudapi.com";
@@ -274,12 +283,15 @@ async function callIFlyAssessment(
   original_text: string,
   language: string
 ): Promise<AssessmentResult> {
-  const appId = Deno.env.get(provider.api_key_secret_name || 'IFLY_APP_ID');
-  const apiKey = Deno.env.get(provider.api_secret_key_name || 'IFLY_API_KEY');
+  // 优先从 config_json 读取密钥，其次从环境变量
+  const appId = provider.config_json?.api_key || 
+    Deno.env.get(provider.api_key_secret_name || 'IFLY_APP_ID');
+  const apiKey = provider.config_json?.api_secret || 
+    Deno.env.get(provider.api_secret_key_name || 'IFLY_API_KEY');
   const apiSecret = Deno.env.get('IFLY_API_SECRET');
   
   if (!appId || !apiKey) {
-    throw new Error('讯飞 API 密钥未配置');
+    throw new Error('讯飞 API 密钥未配置，请在管理后台设置');
   }
 
   // 讯飞评测 WebSocket API 需要特殊处理
