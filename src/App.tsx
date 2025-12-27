@@ -24,6 +24,7 @@ import AdminProfessionalProviders from "./pages/admin/ProfessionalProviders";
 
 const queryClient = new QueryClient();
 
+// 这些组件必须在 AuthProvider 内部使用
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
@@ -62,6 +63,7 @@ const AppRoutes = () => (
   </Routes>
 );
 
+// 确保 AuthProvider 在 BrowserRouter 内部
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <HelmetProvider>
