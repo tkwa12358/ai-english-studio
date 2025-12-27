@@ -9,6 +9,7 @@ export type Profile = {
   display_name: string | null;
   avatar_url: string | null;
   role: 'user' | 'admin';
+  voice_minutes: number;
   professional_voice_minutes: number;
   created_at: string;
   updated_at: string;
