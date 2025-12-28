@@ -27,17 +27,133 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, Video, VideoCategory } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
+
+const generateThumbnail = (videoFile: File): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      // Capture at 0.1s to ensure we have a frame but stays at start
+      video.currentTime = 0.1;
+    };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Thumbnail generation failed'));
+          }
+          // Clean up
+          video.remove();
+        }, 'image/jpeg', 0.8);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    video.onerror = (e) => reject(new Error('Video load error'));
+
+    // Create blob URL for the video file
+    video.src = URL.createObjectURL(videoFile);
+  });
+};
+
+// SRT Parser Helper
+const parseBilingualSRT = (srtContent: string) => {
+  const lines = srtContent.trim().split(/\r?\n/);
+  let enSRT = '';
+  let cnSRT = '';
+
+  let i = 0;
+  let counter = 1;
+
+  while (i < lines.length) {
+    const indexLine = lines[i].trim();
+    if (!indexLine) {
+      i++;
+      continue;
+    }
+
+    // Expecting index number
+    if (!/^\d+$/.test(indexLine)) {
+      i++; continue;
+    }
+
+    // Time line
+    const timeLine = lines[i + 1]?.trim();
+
+    // Content lines
+    let enLine = '';
+    let cnLine = '';
+
+    let j = i + 2;
+    while (j < lines.length && lines[j].trim() !== '') {
+      const line = lines[j].trim();
+      // Assuming first line is English, second is Chinese, or mixed logic
+      // Simple heuristic: if contains Chinese characters -> Chinese, else English
+      if (/[\u4e00-\u9fa5]/.test(line)) {
+        cnLine += (cnLine ? '\n' : '') + line;
+      } else {
+        enLine += (enLine ? '\n' : '') + line;
+      }
+      j++;
+    }
+
+    // Re-scanning content lines for a more robust bilingual split
+    const contentLines = [];
+    j = i + 2;
+    while (j < lines.length && lines[j].trim() !== '') {
+      contentLines.push(lines[j].trim());
+      j++;
+    }
+
+    if (contentLines.length > 0) {
+      if (contentLines.length === 1) {
+        // Check if mixed
+        if (/[\u4e00-\u9fa5]/.test(contentLines[0])) {
+          cnLine = contentLines[0]; // All Chinese?
+        } else {
+          enLine = contentLines[0];
+        }
+      } else {
+        // Usually line 1 en, line 2 cn
+        enLine = contentLines[0];
+        cnLine = contentLines.slice(1).join('\n');
+      }
+    }
+
+    if (enLine) {
+      enSRT += `${counter}\n${timeLine}\n${enLine}\n\n`;
+    }
+    if (cnLine) {
+      cnSRT += `${counter}\n${timeLine}\n${cnLine}\n\n`;
+    }
+
+    if (enLine || cnLine) counter++;
+    i = j;
+  }
+
+  return { en: enSRT.trim(), cn: cnSRT.trim() };
+};
 
 const AdminVideos: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -202,23 +318,7 @@ const AdminVideos: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="video_url">视频URL</Label>
-                  <Input
-                    id="video_url"
-                    value={formData.video_url}
-                    onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="thumbnail_url">缩略图URL</Label>
-                  <Input
-                    id="thumbnail_url"
-                    value={formData.thumbnail_url}
-                    onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
-                  />
-                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="category">分类</Label>
                   <Select
@@ -237,24 +337,140 @@ const AdminVideos: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subtitles_en">英文字幕 (SRT格式)</Label>
-                  <Textarea
-                    id="subtitles_en"
-                    value={formData.subtitles_en}
-                    onChange={(e) => setFormData({ ...formData, subtitles_en: e.target.value })}
-                    rows={5}
-                  />
+                <div className="space-y-4 border p-4 rounded-lg bg-muted/50">
+                  <h3 className="font-medium">上传文件</h3>
+
+                  {/* Video Upload Logic with Auto Thumbnail */}
+                  <div className="space-y-2">
+                    <Label className="font-semibold text-primary">1. 上传本地视频</Label>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="video/*"
+                          disabled={uploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+
+                            setUploading(true);
+                            try {
+                              // 1. Upload Video
+                              const fileName = `${Date.now()}-${file.name.replace(/[^\x00-\x7F]/g, '')}`;
+
+                              const { error: uploadError } = await supabase.storage
+                                .from('videos')
+                                .upload(fileName, file);
+
+                              if (uploadError) throw uploadError;
+
+                              const { data: { publicUrl: videoUrl } } = supabase.storage
+                                .from('videos')
+                                .getPublicUrl(fileName);
+
+                              // 2. Generate and Upload Thumbnail
+                              toast({ title: '视频上传成功', description: '正在生成封面图...' });
+
+                              let thumbnailUrl = '';
+                              try {
+                                const thumbBlob = await generateThumbnail(file);
+                                const thumbFile = new File([thumbBlob], `thumb-${fileName}.jpg`, { type: 'image/jpeg' });
+                                const thumbName = `thumb-${Date.now()}.jpg`;
+
+                                const { error: thumbError } = await supabase.storage
+                                  .from('thumbnails')
+                                  .upload(thumbName, thumbFile);
+
+                                if (!thumbError) {
+                                  const { data: { publicUrl: tUrl } } = supabase.storage
+                                    .from('thumbnails')
+                                    .getPublicUrl(thumbName);
+                                  thumbnailUrl = tUrl;
+                                }
+                              } catch (thumbErr) {
+                                console.error('Thumbnail generation failed', thumbErr);
+                                toast({ title: '封面生成失败', description: '请稍后重试或忽略', variant: 'destructive' });
+                              }
+
+                              setFormData(prev => ({
+                                ...prev,
+                                video_url: videoUrl,
+                                thumbnail_url: thumbnailUrl,
+                                title: file.name.replace(/\.[^/.]+$/, "") // Auto-fill title
+                              }));
+
+                              toast({ title: '处理完成', description: '视频和封面已更新' });
+                            } catch (error: any) {
+                              toast({ title: '上传失败', description: error.message, variant: 'destructive' });
+                            } finally {
+                              setUploading(false);
+                            }
+                          }}
+                        />
+                        {uploading && <Loader2 className="animate-spin w-4 h-4" />}
+                      </div>
+                      {/* Video and Thumbnail Status/Preview */}
+                      {formData.video_url && (
+                        <p className="text-xs text-muted-foreground break-all">
+                          视频链接: {formData.video_url}
+                        </p>
+                      )}
+                      {formData.thumbnail_url && (
+                        <div className="flex gap-2 items-center mt-2">
+                          <img src={formData.thumbnail_url} className="h-16 w-24 object-cover rounded border" alt="Thumbnail" />
+                          <p className="text-xs text-muted-foreground">已自动生成封面</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SRT Upload */}
+                  <div className="space-y-2">
+                    <Label className="font-semibold text-primary">2. 上传双语字幕 (.srt)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="file"
+                        accept=".srt"
+                        disabled={parsing}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          setParsing(true);
+                          try {
+                            const text = await file.text();
+                            const { en, cn } = parseBilingualSRT(text);
+
+                            setFormData(prev => ({
+                              ...prev,
+                              subtitles_en: en,
+                              subtitles_cn: cn
+                            }));
+
+                            toast({ title: '字幕解析成功', description: '已自动分离中英文字幕并保存' });
+                          } catch (error: any) {
+                            toast({ title: '解析失败', description: error.message, variant: 'destructive' });
+                          } finally {
+                            setParsing(false);
+                          }
+                        }}
+                      />
+                      {parsing && <Loader2 className="animate-spin w-4 h-4" />}
+                    </div>
+                    {/* Status Indicator */}
+                    <div className="flex gap-4 text-xs mt-1">
+                      <span className={formData.subtitles_en ? "text-green-600 flex items-center gap-1" : "text-muted-foreground flex items-center gap-1"}>
+                        {formData.subtitles_en ? <CheckCircle2 className="w-3 h-3" /> : null}
+                        {formData.subtitles_en ? "英文字幕已就绪" : "等待解析英文字幕"}
+                      </span>
+                      <span className={formData.subtitles_cn ? "text-green-600 flex items-center gap-1" : "text-muted-foreground flex items-center gap-1"}>
+                        {formData.subtitles_cn ? <CheckCircle2 className="w-3 h-3" /> : null}
+                        {formData.subtitles_cn ? "中文字幕已就绪" : "等待解析中文字幕"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subtitles_cn">中文字幕 (SRT格式)</Label>
-                  <Textarea
-                    id="subtitles_cn"
-                    value={formData.subtitles_cn}
-                    onChange={(e) => setFormData({ ...formData, subtitles_cn: e.target.value })}
-                    rows={5}
-                  />
-                </div>
+
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="is_published"
@@ -290,11 +506,10 @@ const AdminVideos: React.FC = () => {
                 </TableCell>
                 <TableCell>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      video.is_published
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
+                    className={`px-2 py-1 rounded-full text-xs ${video.is_published
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-muted text-muted-foreground'
+                      }`}
                   >
                     {video.is_published ? '已发布' : '草稿'}
                   </span>
@@ -322,5 +537,14 @@ const AdminVideos: React.FC = () => {
     </AdminLayout>
   );
 };
+
+// Start of update: Add CheckCircle2 to imports
+// I need to start imports from line 1.
+// ... Oh, I am writing the WHOLE file.
+// I missed `CheckCircle2` in the imports list in the string above. 
+// I used it in JSX: <CheckCircle2 ... />
+// I must update the import line: 
+// import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
+// I will correct this in the `CodeContent`.
 
 export default AdminVideos;

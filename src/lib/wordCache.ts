@@ -16,11 +16,11 @@ export const getLocalCache = (): Record<string, CachedWord> => {
   try {
     const cached = localStorage.getItem(LOCAL_CACHE_KEY);
     if (!cached) return {};
-    
+
     const data = JSON.parse(cached);
     const now = Date.now();
     const expiryMs = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-    
+
     // 过滤过期条目
     const validEntries: Record<string, CachedWord> = {};
     for (const [key, value] of Object.entries(data)) {
@@ -29,12 +29,12 @@ export const getLocalCache = (): Record<string, CachedWord> => {
         validEntries[key] = entry;
       }
     }
-    
+
     // 清理过期条目
     if (Object.keys(validEntries).length !== Object.keys(data).length) {
       localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(validEntries));
     }
-    
+
     return validEntries;
   } catch {
     return {};
@@ -63,9 +63,9 @@ export const getFromDbCache = async (word: string) => {
     .select('*')
     .eq('word', word.toLowerCase())
     .maybeSingle();
-  
+
   if (error || !data) return null;
-  
+
   return {
     word: data.word,
     phonetic: data.phonetic || '',
@@ -89,7 +89,7 @@ export const saveToDbCache = async (wordData: {
     },
     { onConflict: 'word' }
   );
-  
+
   return !error;
 };
 
@@ -103,32 +103,67 @@ export const fetchFromApi = async (word: string) => {
   };
 
   try {
-    // 尝试 Free Dictionary API
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`
-    );
+    // 1. 尝试 Free Dictionary API (English Definitions & Phonetic)
+    try {
+      const response = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`
+      );
 
-    if (response.ok) {
-      const data = await response.json();
-      const entry = data[0];
-      wordInfo = {
-        word: entry.word,
-        phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
-        translation: '',
-        definitions: entry.meanings?.slice(0, 3).map((m: any) => ({
+      if (response.ok) {
+        const data = await response.json();
+        const entry = data[0];
+        wordInfo.word = entry.word; // Use lemma if redirected (e.g. apples -> apple)
+        wordInfo.phonetic = entry.phonetic || entry.phonetics?.[0]?.text || '';
+        wordInfo.definitions = entry.meanings?.slice(0, 3).map((m: any) => ({
           partOfSpeech: m.partOfSpeech,
           definition: m.definitions?.[0]?.definition || '',
-        })) || [],
-      };
+        })) || [];
+      }
+    } catch (e) {
+      console.warn('Free Dictionary API failed:', e);
     }
 
-    // 获取中文翻译
-    const { data: translationData } = await supabase.functions.invoke('translate', {
+    // 2. 获取中文翻译 / 补全信息 (AI / Edge Function)
+    const { data: translationData, error: translationError } = await supabase.functions.invoke('translate', {
       body: { text: word.toLowerCase() },
     });
 
-    if (translationData?.translation) {
-      wordInfo.translation = translationData.translation;
+    if (!translationError && translationData) {
+      // 优先使用 AI 返回的中文翻译
+      if (translationData.translation) {
+        wordInfo.translation = translationData.translation;
+      }
+      // 如果缺少音标，使用 AI 返回的
+      if (!wordInfo.phonetic && translationData.phonetic) {
+        wordInfo.phonetic = translationData.phonetic;
+      }
+      // 如果缺少定义，或者想要补充中文定义，这里我们可以合并或优先展示中文
+      if (translationData.definitions && Array.isArray(translationData.definitions)) {
+        const aiDefs = translationData.definitions.map((def: string) => ({
+          partOfSpeech: translationData.partOfSpeech || 'unknown',
+          definition: def // Chinese definitions from AI
+        }));
+        // Add to top if English defs exist, or replace?
+        // User wants Chinese. Let's prepend.
+        wordInfo.definitions = [...aiDefs, ...wordInfo.definitions];
+      }
+    } else {
+      // 3. Fallback: MyMemory API (Free, no key) if AI fails
+      try {
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-CN`);
+        const data = await res.json();
+        if (data.responseData?.translatedText) {
+          wordInfo.translation = data.responseData.translatedText;
+          if (wordInfo.definitions.length === 0) {
+            wordInfo.definitions.push({
+              partOfSpeech: 'unknown',
+              definition: data.responseData.translatedText
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('MyMemory Fallback failed:', e);
+      }
     }
 
     return wordInfo;
@@ -144,25 +179,36 @@ export const lookupWord = async (word: string) => {
 
   // 1. 先查本地缓存
   const localCached = getFromLocalCache(normalizedWord);
-  if (localCached) {
+  if (localCached && localCached.translation) { // Check for translation
     return { ...localCached, source: 'local' as const };
   }
 
   // 2. 查数据库缓存
   const dbCached = await getFromDbCache(normalizedWord);
-  if (dbCached) {
+  if (dbCached && dbCached.translation) { // Check for translation
     // 存入本地缓存
     setLocalCache(normalizedWord, dbCached);
     return { ...dbCached, source: 'database' as const };
   }
 
-  // 3. 调用 API
+  // 3. 调用 API (Fallback or Enrichment)
+  console.log(`Searching API for ${normalizedWord} (Local/DB missing translation)...`);
   const apiResult = await fetchFromApi(normalizedWord);
   if (apiResult) {
+    // Preserve DB phonetic if API missed it
+    if (dbCached && !apiResult.phonetic && dbCached.phonetic) {
+      apiResult.phonetic = dbCached.phonetic;
+    }
+
     // 存入数据库和本地缓存
     await saveToDbCache(apiResult);
     setLocalCache(normalizedWord, apiResult);
     return { ...apiResult, source: 'api' as const };
+  }
+
+  // If API failed but we had DB record (even without translation), return it as last resort
+  if (dbCached) {
+    return { ...dbCached, source: 'database' as const };
   }
 
   return null;

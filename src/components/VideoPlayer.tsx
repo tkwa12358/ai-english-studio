@@ -1,12 +1,26 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { 
-  Play, Pause, SkipBack, SkipForward, 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, RotateCcw,
   Repeat, Languages
 } from 'lucide-react';
 import { Subtitle } from '@/lib/supabase';
+
+export interface VideoPlayerRef {
+  seek: (time: number) => void;
+  play: () => void;
+  pause: () => void;
+  togglePlay: () => void;
+}
 
 interface VideoPlayerProps {
   videoUrl: string;
@@ -19,7 +33,7 @@ interface VideoPlayerProps {
   onToggleTranslation?: () => void;
 }
 
-export const VideoPlayer = ({
+export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   videoUrl,
   subtitles,
   subtitlesCn,
@@ -28,7 +42,7 @@ export const VideoPlayer = ({
   onSubtitleClick,
   showTranslation = true,
   onToggleTranslation
-}: VideoPlayerProps) => {
+}, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -39,6 +53,24 @@ export const VideoPlayer = ({
   const [isLooping, setIsLooping] = useState(false);
   const [loopStart, setLoopStart] = useState<number | null>(null);
   const [loopEnd, setLoopEnd] = useState<number | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    seek: (time: number) => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = time;
+        setCurrentTime(time);
+      }
+    },
+    play: () => {
+      videoRef.current?.play();
+    },
+    pause: () => {
+      videoRef.current?.pause();
+    },
+    togglePlay: () => {
+      togglePlay();
+    }
+  }));
 
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
@@ -61,10 +93,14 @@ export const VideoPlayer = ({
       if (isLooping && loopStart !== null && loopEnd !== null) {
         if (time >= loopEnd) {
           videoRef.current.currentTime = loopStart;
+          // Optionally play if paused?
+          if (!isPlaying) {
+            // videoRef.current.play(); // Usually keep current state
+          }
         }
       }
     }
-  }, [onTimeUpdate, isLooping, loopStart, loopEnd]);
+  }, [onTimeUpdate, isLooping, loopStart, loopEnd, isPlaying]);
 
   const seek = (time: number) => {
     if (videoRef.current) {
@@ -105,19 +141,18 @@ export const VideoPlayer = ({
     }
   };
 
-  const cyclePlaybackRate = () => {
-    const rates = [0.5, 0.75, 1, 1.25, 1.5];
-    const currentIndex = rates.indexOf(playbackRate);
-    const nextRate = rates[(currentIndex + 1) % rates.length];
-    setPlaybackRate(nextRate);
+  const handlePlaybackRateChange = (value: string) => {
+    const rate = parseFloat(value);
+    setPlaybackRate(rate);
     if (videoRef.current) {
-      videoRef.current.playbackRate = nextRate;
+      videoRef.current.playbackRate = rate;
     }
   };
 
   const setLoopForCurrentSubtitle = () => {
     if (currentSubtitle) {
       setLoopStart(currentSubtitle.start);
+      // Add a small buffer to end or use exact? Usually end is exact.
       setLoopEnd(currentSubtitle.end);
       setIsLooping(true);
     }
@@ -137,7 +172,7 @@ export const VideoPlayer = ({
 
   const getCurrentTranslation = () => {
     if (!showTranslation || !subtitlesCn || !currentSubtitle) return null;
-    return subtitlesCn.find(s => 
+    return subtitlesCn.find(s =>
       Math.abs(s.start - currentSubtitle.start) < 0.5
     );
   };
@@ -145,6 +180,9 @@ export const VideoPlayer = ({
   useEffect(() => {
     const video = videoRef.current;
     if (video) {
+      // Restore playback rate if changed externally or on load
+      video.playbackRate = playbackRate;
+
       video.addEventListener('loadedmetadata', () => setDuration(video.duration));
       video.addEventListener('timeupdate', handleTimeUpdate);
       video.addEventListener('play', () => setIsPlaying(true));
@@ -152,133 +190,133 @@ export const VideoPlayer = ({
     }
     return () => {
       if (video) {
-        video.removeEventListener('loadedmetadata', () => {});
+        video.removeEventListener('loadedmetadata', () => { });
         video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('play', () => {});
-        video.removeEventListener('pause', () => {});
+        video.removeEventListener('play', () => { });
+        video.removeEventListener('pause', () => { });
       }
     };
-  }, [handleTimeUpdate]);
+  }, [handleTimeUpdate, playbackRate]);
 
   return (
-    <div className="w-full">
+    <div className="w-full h-full flex flex-col">
       {/* Video */}
-      <div className="relative bg-foreground aspect-video">
+      <div className="relative bg-black flex-1 flex items-center justify-center overflow-hidden">
         <video
           ref={videoRef}
           src={videoUrl}
-          className="w-full h-full"
+          className="w-full h-full object-contain"
           onClick={togglePlay}
         />
-        
+
         {/* Subtitle Overlay */}
-        {currentSubtitle && (
-          <div className="absolute bottom-16 left-0 right-0 text-center px-4">
-            <div 
-              className="inline-block bg-background/90 border-2 border-foreground px-4 py-2 cursor-pointer hover:bg-accent transition-colors"
-              onClick={() => onSubtitleClick(currentSubtitle)}
-            >
-              <p className="text-lg md:text-xl font-medium">{currentSubtitle.text}</p>
-              {showTranslation && getCurrentTranslation() && (
-                <p className="text-sm md:text-base text-muted-foreground mt-1">
-                  {getCurrentTranslation()?.text}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* Controls */}
-      <div className="border-2 border-t-0 border-foreground bg-card p-3">
+      <div className="bg-card border-t p-3 space-y-2">
         {/* Progress Bar */}
-        <div className="mb-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground w-10 text-right">{formatTime(currentTime)}</span>
           <Slider
             value={[currentTime]}
             max={duration}
             step={0.1}
             onValueChange={(value) => seek(value[0])}
-            className="cursor-pointer"
+            className="flex-1 cursor-pointer"
           />
-          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
+          <span className="text-xs text-muted-foreground w-10">{formatTime(duration)}</span>
         </div>
 
-        {/* Control Buttons */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          {/* 左侧：播放控制 */}
+        {/* Control Buttons Row */}
+        <div className="flex items-center justify-between">
+
+          {/* Left: Playback Controls */}
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={skipBack} title="上一句 Previous">
               <SkipBack className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={togglePlay} title={isPlaying ? "暂停 Pause" : "播放 Play"}>
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            <Button variant="ghost" size="icon" onClick={togglePlay} className="h-10 w-10" title={isPlaying ? "暂停 Pause" : "播放 Play"}>
+              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
             </Button>
             <Button variant="ghost" size="icon" onClick={skipForward} title="下一句 Next">
               <SkipForward className="w-5 h-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => currentSubtitle && seek(currentSubtitle.start)}
               title="重播本句 Replay"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
             </Button>
           </div>
 
-          {/* 右侧：功能控制 */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            {/* 中英切换按钮 - 放在AB循环左侧 */}
+          {/* Right: Tools (Speed, Loop, Lang, Volume) */}
+          <div className="flex items-center gap-2">
+
+            {/* Speed Dropdown */}
+            <Select value={playbackRate.toString()} onValueChange={handlePlaybackRateChange}>
+              <SelectTrigger className="h-8 w-[70px] text-xs">
+                <SelectValue placeholder="速度" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0.5">0.5x</SelectItem>
+                <SelectItem value="0.75">0.75x</SelectItem>
+                <SelectItem value="1">1.0x</SelectItem>
+                <SelectItem value="1.25">1.25x</SelectItem>
+                <SelectItem value="1.5">1.5x</SelectItem>
+                <SelectItem value="2">2.0x</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Loop Toggle */}
+            <Button
+              variant={isLooping ? "secondary" : "ghost"}
+              size="sm"
+              onClick={isLooping ? clearLoop : setLoopForCurrentSubtitle}
+              className={`h-8 px-2 text-xs ${isLooping ? 'text-primary font-bold' : ''}`}
+              title="单句循环 Loop Sentence"
+            >
+              <Repeat className="w-3.5 h-3.5 mr-1" />
+              <span className="hidden sm:inline">{isLooping ? '循环中' : 'AB'}</span>
+            </Button>
+
+            {/* Language Toggle */}
             {onToggleTranslation && (
-              <Button 
-                variant={showTranslation ? "default" : "outline"} 
+              <Button
+                variant={showTranslation ? "secondary" : "ghost"}
                 size="sm"
                 onClick={onToggleTranslation}
-                className="text-xs px-2 sm:px-3"
-                title={showTranslation ? "隐藏翻译 Hide Translation" : "显示翻译 Show Translation"}
+                className="h-8 px-2 text-xs"
+                title="切换字幕语言 Toggle Language"
               >
-                <Languages className="w-4 h-4 mr-1" />
-                <span className="hidden sm:inline">{showTranslation ? '中/英' : 'EN'}</span>
+                <Languages className="w-3.5 h-3.5 mr-1" />
+                <span className="hidden sm:inline">{showTranslation ? '中英' : '英文'}</span>
               </Button>
             )}
 
-            {/* AB循环 */}
-            <Button 
-              variant={isLooping ? "default" : "outline"} 
-              size="sm"
-              onClick={isLooping ? clearLoop : setLoopForCurrentSubtitle}
-              className="text-xs px-2 sm:px-3"
-              title={isLooping ? "取消循环 Cancel Loop" : "AB循环 Loop Sentence"}
-            >
-              <Repeat className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isLooping ? '循环中' : 'AB'}</span>
-            </Button>
-            
-            {/* 倍速 */}
-            <Button variant="outline" size="sm" onClick={cyclePlaybackRate} className="text-xs px-2 sm:px-3" title="播放速度 Speed">
-              {playbackRate}x
-            </Button>
-
-            {/* 音量 */}
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={toggleMute} title={isMuted ? "取消静音 Unmute" : "静音 Mute"}>
-                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {/* Volume */}
+            <div className="flex items-center gap-1 group">
+              <Button variant="ghost" size="icon" onClick={toggleMute} className="h-8 w-8">
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </Button>
-              <div className="w-16 hidden sm:block">
+              <div className="w-0 overflow-hidden group-hover:w-20 transition-all duration-300">
                 <Slider
                   value={[isMuted ? 0 : volume]}
                   max={1}
                   step={0.1}
                   onValueChange={handleVolumeChange}
+                  className="w-16"
                 />
               </div>
             </div>
+
           </div>
         </div>
       </div>
     </div>
   );
-};
+});
+
+VideoPlayer.displayName = 'VideoPlayer';

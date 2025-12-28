@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Upload, FileVideo, FileText, Play, ArrowLeft, CheckCircle, Eye, EyeOff, Clock, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { parseSRT, Subtitle } from '@/lib/supabase';
+import { parseSRT, parseBilingualSRT, Subtitle } from '@/lib/supabase';
 import { Header } from '@/components/Header';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { SubtitleList } from '@/components/SubtitleList';
@@ -16,7 +16,7 @@ import { WordLookup } from '@/components/WordLookup';
 const LocalLearn: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [subtitlesEn, setSubtitlesEn] = useState<Subtitle[]>([]);
@@ -32,11 +32,58 @@ const LocalLearn: React.FC = () => {
   const [isLearning, setIsLearning] = useState(false);
   const [completedSentences, setCompletedSentences] = useState<number[]>([]);
   const [practiceTime, setPracticeTime] = useState(0);
+  const [hasCachedSrt, setHasCachedSrt] = useState(false);
   const practiceStartRef = useRef<number | null>(null);
 
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const srtEnInputRef = useRef<HTMLInputElement>(null);
-  const srtCnInputRef = useRef<HTMLInputElement>(null);
+  const srtInputRef = useRef<HTMLInputElement>(null);
+
+  // 页面加载时检查缓存的 SRT
+  useEffect(() => {
+    const cached = localStorage.getItem('lastLocalSrt');
+    if (cached) {
+      try {
+        const data = JSON.parse(cached);
+        if (data.srtContent) {
+          setHasCachedSrt(true);
+        }
+      } catch (e) {
+        localStorage.removeItem('lastLocalSrt');
+      }
+    }
+  }, []);
+
+  // 加载缓存的 SRT
+  const loadCachedSrt = useCallback(() => {
+    const cached = localStorage.getItem('lastLocalSrt');
+    if (cached) {
+      try {
+        const data = JSON.parse(cached);
+        const { en, cn } = parseBilingualSRT(data.srtContent);
+        setSubtitlesEn(en);
+        setSubtitlesCn(cn);
+        toast({
+          title: '已加载上次字幕',
+          description: `共 ${en.length} 条英文字幕${cn.length > 0 ? `，${cn.length} 条中文字幕` : ''}`,
+        });
+        return true;
+      } catch (e) {
+        localStorage.removeItem('lastLocalSrt');
+      }
+    }
+    return false;
+  }, [toast]);
+
+  // 保存 SRT 到缓存
+  const saveSrtToCache = useCallback((content: string, videoName: string) => {
+    const data = {
+      videoName,
+      srtContent: content,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem('lastLocalSrt', JSON.stringify(data));
+    setHasCachedSrt(true);
+  }, []);
 
   const handleVideoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,48 +103,55 @@ const LocalLearn: React.FC = () => {
         title: '视频已加载',
         description: file.name,
       });
+      // 自动加载缓存的字幕
+      if (hasCachedSrt && subtitlesEn.length === 0) {
+        loadCachedSrt();
+      }
     }
-  }, [toast]);
+  }, [toast, hasCachedSrt, subtitlesEn.length, loadCachedSrt]);
 
-  const handleSrtEnUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // 处理双语 SRT 上传
+  const handleBilingualSrtUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        const parsed = parseSRT(content);
-        setSubtitlesEn(parsed);
-        toast({
-          title: '英文字幕已加载',
-          description: `共 ${parsed.length} 条字幕`,
-        });
-      };
-      reader.readAsText(file);
-    }
-  }, [toast]);
+        const { en, cn } = parseBilingualSRT(content);
+        setSubtitlesEn(en);
+        setSubtitlesCn(cn);
 
-  const handleSrtCnUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        const parsed = parseSRT(content);
-        setSubtitlesCn(parsed);
-        toast({
-          title: '中文字幕已加载',
-          description: `共 ${parsed.length} 条字幕`,
-        });
+        if (en.length > 0 && cn.length > 0) {
+          toast({
+            title: '双语字幕已加载',
+            description: `共 ${en.length} 条英文字幕，${cn.length} 条中文字幕`,
+          });
+          // 保存到缓存
+          saveSrtToCache(content, videoFile?.name || 'unknown');
+        } else if (en.length > 0) {
+          toast({
+            title: '英文字幕已加载',
+            description: `共 ${en.length} 条字幕（未检测到中文翻译）`,
+          });
+          // 保存到缓存
+          saveSrtToCache(content, videoFile?.name || 'unknown');
+        } else {
+          toast({
+            title: '字幕解析错误',
+            description: '未能识别有效的英文字幕内容',
+            variant: 'destructive',
+          });
+        }
       };
       reader.readAsText(file);
     }
-  }, [toast]);
+  }, [toast, videoFile?.name, saveSrtToCache]);
 
   const handleTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
     const current = subtitlesEn.find(s => time >= s.start && time <= s.end);
     if (current) {
-      const translation = subtitlesCn.find(s => 
+      const translation = subtitlesCn.find(s =>
         Math.abs(s.start - current.start) < 1
       )?.text;
       setCurrentSubtitle({ ...current, translation });
@@ -144,7 +198,7 @@ const LocalLearn: React.FC = () => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     if (hours > 0) {
       return `${hours}小时${minutes}分钟`;
     } else if (minutes > 0) {
@@ -202,7 +256,7 @@ const LocalLearn: React.FC = () => {
                   {showTranslation ? '隐藏翻译' : '显示翻译'}
                 </Button>
               </div>
-              
+
               {/* 学习进度指示器 */}
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-1">
@@ -339,22 +393,25 @@ const LocalLearn: React.FC = () => {
                   )}
                 </div>
 
-                {/* English SRT Upload */}
+                {/* Bilingual SRT Upload */}
                 <div className="space-y-2">
-                  <Label htmlFor="srt-en" className="text-sm font-medium">
-                    英文字幕 (SRT) <span className="text-destructive">*必需</span>
+                  <Label htmlFor="srt" className="text-sm font-medium">
+                    字幕文件 (SRT) <span className="text-destructive">*必需</span>
                   </Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    支持双语字幕（第一行英文，第二行中文）或纯英文字幕
+                  </p>
                   <Input
-                    ref={srtEnInputRef}
-                    id="srt-en"
+                    ref={srtInputRef}
+                    id="srt"
                     type="file"
                     accept=".srt"
-                    onChange={handleSrtEnUpload}
+                    onChange={handleBilingualSrtUpload}
                     className="hidden"
                   />
                   <Button
                     variant="outline"
-                    onClick={() => srtEnInputRef.current?.click()}
+                    onClick={() => srtInputRef.current?.click()}
                     className={`w-full h-auto py-4 rounded-xl border-dashed border-2 hover:bg-accent/30 ${subtitlesEn.length > 0 ? 'border-primary bg-primary/5' : ''}`}
                   >
                     <div className="flex items-center gap-3">
@@ -365,39 +422,8 @@ const LocalLearn: React.FC = () => {
                       )}
                       <span className={subtitlesEn.length > 0 ? 'text-primary font-medium' : 'text-muted-foreground'}>
                         {subtitlesEn.length > 0
-                          ? `已加载 ${subtitlesEn.length} 条字幕`
-                          : '点击选择英文字幕文件'}
-                      </span>
-                    </div>
-                  </Button>
-                </div>
-
-                {/* Chinese SRT Upload */}
-                <div className="space-y-2">
-                  <Label htmlFor="srt-cn" className="text-sm font-medium">中文字幕 (SRT) <span className="text-muted-foreground text-xs">可选</span></Label>
-                  <Input
-                    ref={srtCnInputRef}
-                    id="srt-cn"
-                    type="file"
-                    accept=".srt"
-                    onChange={handleSrtCnUpload}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => srtCnInputRef.current?.click()}
-                    className={`w-full h-auto py-4 rounded-xl border-dashed border-2 hover:bg-accent/30 ${subtitlesCn.length > 0 ? 'border-primary bg-primary/5' : ''}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {subtitlesCn.length > 0 ? (
-                        <CheckCircle className="h-5 w-5 text-primary" />
-                      ) : (
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <span className={subtitlesCn.length > 0 ? 'text-primary font-medium' : 'text-muted-foreground'}>
-                        {subtitlesCn.length > 0
-                          ? `已加载 ${subtitlesCn.length} 条字幕`
-                          : '点击选择中文字幕文件'}
+                          ? `已加载 ${subtitlesEn.length} 条英文${subtitlesCn.length > 0 ? ` + ${subtitlesCn.length} 条中文` : ''}`
+                          : '点击选择字幕文件'}
                       </span>
                     </div>
                   </Button>

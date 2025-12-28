@@ -1,26 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
-import { VideoPlayer } from '@/components/VideoPlayer';
+import { VideoPlayer, VideoPlayerRef } from '@/components/VideoPlayer';
 import { SubtitleList } from '@/components/SubtitleList';
 import { ProfessionalAssessment } from '@/components/ProfessionalAssessment';
 import { WordLookup } from '@/components/WordLookup';
+import { CategoryTabs } from '@/components/CategoryTabs';
+import { RecentlyLearned } from '@/components/RecentlyLearned';
 import { supabase, Video, Subtitle, parseSRT } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
-import { Loader2, ChevronLeft, Clock, CheckCircle2 } from 'lucide-react';
+import { Loader2, ChevronLeft, Clock, CheckCircle2, Languages } from 'lucide-react';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
 
 const Learn = () => {
   const { videoId } = useParams();
+  const navigate = useNavigate();
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [subtitlesCn, setSubtitlesCn] = useState<Subtitle[]>([]);
   const [currentSubtitle, setCurrentSubtitle] = useState<Subtitle | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showTranslation, setShowTranslation] = useState(true);
+  const playerRef = useRef<VideoPlayerRef>(null);
+
+  // Initialize showTranslation from localStorage or default to true
+  const [showTranslation, setShowTranslation] = useState(() => {
+    return localStorage.getItem('showTranslation') !== 'false';
+  });
   const [practiceSubtitle, setPracticeSubtitle] = useState<Subtitle | null>(null);
   const [practiceSubtitleIndex, setPracticeSubtitleIndex] = useState<number | null>(null);
   const [lookupWord, setLookupWord] = useState<{ word: string; context: string } | null>(null);
@@ -55,15 +64,35 @@ const Learn = () => {
       .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
-    
+
     if (!error && data) {
       setVideos(data as Video[]);
     }
     setLoading(false);
   };
 
+  // Effect to load last played video if no videoId in params
+  useEffect(() => {
+    if (!videoId && videos.length > 0 && !selectedVideo) {
+      const lastVideoId = localStorage.getItem('lastVideoId');
+      if (lastVideoId) {
+        const lastVideo = videos.find(v => v.id === lastVideoId);
+        if (lastVideo) {
+          selectVideo(lastVideo);
+        }
+      }
+    }
+  }, [videoId, videos, selectedVideo]);
+
+  // Persist showTranslation preference
+  useEffect(() => {
+    localStorage.setItem('showTranslation', showTranslation.toString());
+  }, [showTranslation]);
+
   const selectVideo = (video: Video) => {
     setSelectedVideo(video);
+    // Persist last played video
+    localStorage.setItem('lastVideoId', video.id);
     if (video.subtitles_en) {
       setSubtitles(parseSRT(video.subtitles_en));
     }
@@ -76,7 +105,7 @@ const Learn = () => {
     setCurrentTime(time);
     const current = subtitles.find(s => time >= s.start && time <= s.end);
     setCurrentSubtitle(current || null);
-    
+
     // 每30秒自动保存进度
     const now = Date.now();
     if (now - lastSaveTimeRef.current > 30000) {
@@ -87,20 +116,18 @@ const Learn = () => {
 
   const handleSubtitleClick = (subtitle: Subtitle) => {
     setCurrentSubtitle(subtitle);
+    if (playerRef.current) {
+      playerRef.current.seek(subtitle.start);
+      playerRef.current.play();
+    }
   };
-
-  // 处理视频播放/暂停
-  const handlePlay = useCallback(() => {
-    startTracking();
-  }, [startTracking]);
-
-  const handlePause = useCallback(() => {
-    pauseTracking();
-    savePosition(currentTime);
-  }, [pauseTracking, savePosition, currentTime]);
 
   // 处理跟读练习 - 直接打开专业评测
   const handlePractice = useCallback((subtitle: Subtitle, index: number) => {
+    // Pause video when practicing
+    if (playerRef.current) {
+      playerRef.current.pause();
+    }
     setPracticeSubtitle(subtitle);
     setPracticeSubtitleIndex(index);
   }, []);
@@ -139,101 +166,125 @@ const Learn = () => {
       <Helmet>
         <title>{selectedVideo?.title || '视频学习'} - AI English Club</title>
       </Helmet>
-      
+
       <div className="min-h-screen gradient-bg dark:gradient-bg-dark flex flex-col">
         <Header />
-        
+
         <main className="flex-1 container mx-auto px-4 py-6">
           {!selectedVideo ? (
-            // Video List
+            // Video List with Categories and Recent Learning
             <div>
-              <h1 className="text-2xl font-bold mb-6">选择视频</h1>
+              {/* 分类标签栏 */}
+              <CategoryTabs
+                selectedCategory={selectedCategory}
+                onSelectCategory={setSelectedCategory}
+                onLocalLearningClick={() => navigate('/local-learn')}
+              />
+
+              {/* 继续学习区域 */}
+              <RecentlyLearned onSelectVideo={selectVideo} />
+
+              {/* 推荐视频标题 */}
+              <h2 className="text-lg font-semibold mb-4">推荐视频</h2>
+
+              {/* 视频列表 */}
               {videos.length === 0 ? (
                 <div className="glass p-12 rounded-2xl text-center">
                   <p className="text-muted-foreground">暂无可用视频</p>
                 </div>
               ) : (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {videos.map(video => (
-                    <div
-                      key={video.id}
-                      className="glass rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all hover:-translate-y-1"
-                      onClick={() => selectVideo(video)}
-                    >
-                      <div className="aspect-video bg-muted/50 flex items-center justify-center">
-                        {video.thumbnail_url ? (
-                          <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-4xl">🎬</span>
-                        )}
+                  {videos
+                    .filter(video =>
+                      selectedCategory === null || video.category_id === selectedCategory
+                    )
+                    .map(video => (
+                      <div
+                        key={video.id}
+                        className="glass rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all hover:-translate-y-1 group"
+                        onClick={() => selectVideo(video)}
+                      >
+                        <div className="aspect-video bg-muted/50 flex items-center justify-center relative">
+                          {video.thumbnail_url ? (
+                            <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-4xl">🎬</span>
+                          )}
+                          {/* 播放悬浮层 */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="w-14 h-14 bg-primary/90 rounded-full flex items-center justify-center">
+                              <svg className="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </div>
+                          </div>
+                          {/* 时长标签 */}
+                          {video.duration && (
+                            <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 rounded text-xs text-white">
+                              {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          <h3 className="font-bold text-lg mb-1 line-clamp-1">{video.title}</h3>
+                          <p className="text-sm text-muted-foreground truncate">{video.description}</p>
+                        </div>
                       </div>
-                      <div className="p-4">
-                        <h3 className="font-bold text-lg mb-1">{video.title}</h3>
-                        <p className="text-sm text-muted-foreground truncate">{video.description}</p>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                </div>
+              )}
+
+              {/* 筛选后无结果提示 */}
+              {selectedCategory !== null && videos.filter(v => v.category_id === selectedCategory).length === 0 && (
+                <div className="glass p-8 rounded-2xl text-center mt-4">
+                  <p className="text-muted-foreground">该分类下暂无视频</p>
                 </div>
               )}
             </div>
           ) : (
             // Video Player View - PC左右布局，移动端上下布局
-            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-              {/* 顶部导航栏 - 仅显示返回按钮 */}
-              <div className="lg:hidden flex items-center justify-between mb-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+            <div className="flex flex-col gap-4">
+              {/* 顶部统一控制栏 (Header Bar) */}
+              <div className="flex items-center justify-between bg-card/30 backdrop-blur p-3 rounded-2xl border border-white/10 shadow-sm">
+
+                {/* 左侧：返回按钮 */}
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     pauseTracking();
                     savePosition(currentTime);
+                    localStorage.removeItem('lastVideoId');
                     setSelectedVideo(null);
                   }}
-                  className="rounded-xl hover:bg-accent/50"
+                  className="rounded-xl hover:bg-accent/50 gap-2 font-medium"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-1" />
-                  返回
+                  <ChevronLeft className="w-4 h-4" />
+                  返回列表
                 </Button>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{formatPracticeTime()}</span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-2" />
-                  <span>{completedCount}/{subtitles.length}</span>
+
+                {/* 右侧：统计信息 */}
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-background/50 rounded-full border border-border/50">
+                    <Clock className="w-4 h-4 text-blue-500" />
+                    <span>{formatPracticeTime()}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-background/50 rounded-full border border-border/50">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span className="font-medium text-foreground">{completedCount}</span>
+                    <span className="text-xs">/{subtitles.length} 句</span>
+                  </div>
                 </div>
               </div>
 
-              {/* 左侧视频区域 (PC) / 上方视频区域 (移动端) */}
-              <div className="w-full lg:w-3/5 xl:w-2/3">
-                {/* PC端顶部控制栏 */}
-                <div className="hidden lg:flex items-center justify-between gap-2 mb-3">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => {
-                      pauseTracking();
-                      savePosition(currentTime);
-                      setSelectedVideo(null);
-                    }}
-                    className="rounded-xl hover:bg-accent/50"
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" />
-                    返回列表
-                  </Button>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4" />
-                      <span>{formatPracticeTime()}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
-                      <span>{completedCount}/{subtitles.length} 句已完成</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="glass rounded-2xl overflow-hidden">
+              {/* 主要内容区域：视频 + 字幕 */}
+              {/* items-start ensures top alignment for "parallel" look */}
+              <div className="flex flex-col lg:flex-row gap-6 lg:items-stretch">
+
+                {/* 左侧视频区域 - 决定高度的主体 */}
+                <div className="w-full lg:w-2/3 glass rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 flex flex-col relative z-20">
                   <VideoPlayer
+                    ref={playerRef}
                     videoUrl={selectedVideo.video_url}
                     subtitles={subtitles}
                     subtitlesCn={subtitlesCn}
@@ -244,27 +295,34 @@ const Learn = () => {
                     onToggleTranslation={() => setShowTranslation(!showTranslation)}
                   />
                 </div>
-              </div>
-              
-              {/* 右侧字幕列表 (PC) / 下方字幕列表 (移动端) */}
-              <div className="w-full lg:w-2/5 xl:w-1/3 glass rounded-2xl h-[350px] lg:h-[calc(100vh-200px)] lg:max-h-[700px] overflow-hidden flex flex-col">
-                <div className="p-3 border-b border-border/50 flex items-center justify-between">
-                  <span className="text-sm font-medium">字幕列表 Subtitles</span>
-                  <span className="text-xs text-muted-foreground">{subtitles.length} 句</span>
+
+                {/* 右侧字幕列表 - 绝对跟随高度，不撑开父容器 */}
+                <div className="w-full lg:w-1/3 relative z-10">
+                  <div className="h-[500px] lg:h-full lg:absolute lg:inset-0 glass rounded-2xl overflow-hidden shadow-xl flex flex-col ring-1 ring-white/10">
+                    <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-sm">
+                      <span className="text-sm font-semibold flex items-center gap-2">
+                        <Languages className="w-4 h-4 text-primary" />
+                        字幕列表
+                      </span>
+                      <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                        {subtitles.length} 条
+                      </span>
+                    </div>
+                    <SubtitleList
+                      subtitles={subtitles}
+                      subtitlesCn={subtitlesCn}
+                      currentSubtitle={currentSubtitle}
+                      onSubtitleClick={handleSubtitleClick}
+                      onPractice={(subtitle) => {
+                        const index = subtitles.findIndex(s => s === subtitle);
+                        handlePractice(subtitle, index);
+                      }}
+                      onAddWord={(word, context) => setLookupWord({ word, context })}
+                      showTranslation={showTranslation}
+                      completedSentences={progress?.completed_sentences || []}
+                    />
+                  </div>
                 </div>
-                <SubtitleList
-                  subtitles={subtitles}
-                  subtitlesCn={subtitlesCn}
-                  currentSubtitle={currentSubtitle}
-                  onSubtitleClick={handleSubtitleClick}
-                  onPractice={(subtitle) => {
-                    const index = subtitles.findIndex(s => s === subtitle);
-                    handlePractice(subtitle, index);
-                  }}
-                  onAddWord={(word, context) => setLookupWord({ word, context })}
-                  showTranslation={showTranslation}
-                  completedSentences={progress?.completed_sentences || []}
-                />
               </div>
             </div>
           )}
@@ -279,11 +337,13 @@ const Learn = () => {
           onClose={() => {
             setPracticeSubtitle(null);
             setPracticeSubtitleIndex(null);
+            playerRef.current?.play(); // Resume on close
           }}
           onSuccess={handleAssessmentSuccess}
         />
       )}
 
+      {/* 查词 */}
       {lookupWord && (
         <WordLookup
           word={lookupWord.word}
