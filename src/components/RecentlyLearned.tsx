@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, Video } from '@/lib/supabase';
+import { supabase, Video, getStorageUrl } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Play, Clock, Upload } from 'lucide-react';
 
@@ -40,7 +40,7 @@ export const RecentlyLearned: React.FC<RecentlyLearnedProps> = ({
                 .select('video_id, last_position, total_practice_time, updated_at')
                 .eq('user_id', user.id)
                 .order('updated_at', { ascending: false })
-                .limit(10);
+                .limit(1);
 
             if (progressError) throw progressError;
 
@@ -151,7 +151,7 @@ export const RecentlyLearned: React.FC<RecentlyLearnedProps> = ({
                         <div className="relative aspect-video bg-muted/30">
                             {record.video?.thumbnail_url ? (
                                 <img
-                                    src={record.video.thumbnail_url}
+                                    src={getStorageUrl(record.video.thumbnail_url)}
                                     alt={record.video.title}
                                     className="w-full h-full object-cover"
                                 />

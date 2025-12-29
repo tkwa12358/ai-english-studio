@@ -21,13 +21,14 @@ import AdminUsers from "./pages/admin/Users";
 import AdminAuthCodes from "./pages/admin/AuthCodes";
 import AdminDictionary from "./pages/admin/Dictionary";
 import AdminProfessionalProviders from "./pages/admin/ProfessionalProviders";
+import TranslationProviders from "./pages/admin/TranslationProviders";
 
 const queryClient = new QueryClient();
 
 // 这些组件必须在 AuthProvider 内部使用
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -35,7 +36,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isAdmin, loading } = useAuth();
-  
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
   if (!user || !isAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -59,6 +60,7 @@ const AppRoutes = () => (
     <Route path="/admin/auth-codes" element={<AdminRoute><AdminAuthCodes /></AdminRoute>} />
     <Route path="/admin/professional" element={<AdminRoute><AdminProfessionalProviders /></AdminRoute>} />
     <Route path="/admin/dictionary" element={<AdminRoute><AdminDictionary /></AdminRoute>} />
+    <Route path="/admin/translation" element={<AdminRoute><TranslationProviders /></AdminRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

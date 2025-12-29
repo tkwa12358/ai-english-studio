@@ -177,25 +177,32 @@ export const fetchFromApi = async (word: string) => {
 export const lookupWord = async (word: string) => {
   const normalizedWord = word.toLowerCase();
 
+  // 辅助函数：检查是否包含中文
+  const hasChinese = (text: string | null | undefined): boolean => {
+    if (!text) return false;
+    return /[\u4e00-\u9fa5]/.test(text);
+  };
+
   // 1. 先查本地缓存
   const localCached = getFromLocalCache(normalizedWord);
-  if (localCached && localCached.translation) { // Check for translation
+  if (localCached && localCached.translation && hasChinese(localCached.translation)) {
     return { ...localCached, source: 'local' as const };
   }
 
   // 2. 查数据库缓存
   const dbCached = await getFromDbCache(normalizedWord);
-  if (dbCached && dbCached.translation) { // Check for translation
+  if (dbCached && dbCached.translation && hasChinese(dbCached.translation)) {
     // 存入本地缓存
     setLocalCache(normalizedWord, dbCached);
     return { ...dbCached, source: 'database' as const };
   }
 
   // 3. 调用 API (Fallback or Enrichment)
-  console.log(`Searching API for ${normalizedWord} (Local/DB missing translation)...`);
+  // 当缓存无效或缺少中文翻译时执行
+  console.log(`Searching API for ${normalizedWord} (Translation missing or valid cache not found)...`);
   const apiResult = await fetchFromApi(normalizedWord);
   if (apiResult) {
-    // Preserve DB phonetic if API missed it
+    // 如果数据库有音标但 API 没返回，保留数据库的音标
     if (dbCached && !apiResult.phonetic && dbCached.phonetic) {
       apiResult.phonetic = dbCached.phonetic;
     }

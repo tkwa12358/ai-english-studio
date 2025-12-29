@@ -2,7 +2,30 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+// 动态检测 Supabase URL
+function getSupabaseUrl(): string {
+  const envUrl = import.meta.env.VITE_SUPABASE_URL;
+
+  // 如果配置了具体 URL 且不是 "auto"，直接使用
+  if (envUrl && envUrl !== 'auto' && envUrl.startsWith('http')) {
+    return envUrl;
+  }
+
+  // 自动检测：使用当前访问的主机地址
+  const host = window.location.hostname;
+  const isLocalDev = host === 'localhost' || host === '127.0.0.1' ||
+    /^192\.168\./.test(host) || /^172\.\d+\./.test(host) || /^10\./.test(host);
+
+  if (isLocalDev) {
+    // 本地开发：使用同一主机的 54321 端口
+    return `http://${host}:54321`;
+  }
+
+  // 生产环境：使用环境变量或当前域名
+  return envUrl || `${window.location.protocol}//${window.location.host}`;
+}
+
+const SUPABASE_URL = getSupabaseUrl();
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Import the supabase client like this:
@@ -15,3 +38,6 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// 导出当前使用的 URL 供其他模块使用
+export const getActiveSupabaseUrl = () => SUPABASE_URL;

@@ -7,7 +7,7 @@ import { ProfessionalAssessment } from '@/components/ProfessionalAssessment';
 import { WordLookup } from '@/components/WordLookup';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { RecentlyLearned } from '@/components/RecentlyLearned';
-import { supabase, Video, Subtitle, parseSRT } from '@/lib/supabase';
+import { supabase, Video, Subtitle, parseSRT, getStorageUrl } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Loader2, ChevronLeft, Clock, CheckCircle2, Languages } from 'lucide-react';
@@ -206,7 +206,7 @@ const Learn = () => {
                       >
                         <div className="aspect-video bg-muted/50 flex items-center justify-center relative">
                           {video.thumbnail_url ? (
-                            <img src={video.thumbnail_url} alt={video.title} className="w-full h-full object-cover" />
+                            <img src={getStorageUrl(video.thumbnail_url)} alt={video.title} className="w-full h-full object-cover" />
                           ) : (
                             <span className="text-4xl">🎬</span>
                           )}
@@ -285,7 +285,7 @@ const Learn = () => {
                 <div className="w-full lg:w-2/3 glass rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 flex flex-col relative z-20">
                   <VideoPlayer
                     ref={playerRef}
-                    videoUrl={selectedVideo.video_url}
+                    videoUrl={getStorageUrl(selectedVideo.video_url)}
                     subtitles={subtitles}
                     subtitlesCn={subtitlesCn}
                     currentSubtitle={currentSubtitle}
@@ -326,31 +326,35 @@ const Learn = () => {
               </div>
             </div>
           )}
-        </main>
-      </div>
+        </main >
+      </div >
 
       {/* 专业评测 */}
-      {practiceSubtitle && (
-        <ProfessionalAssessment
-          originalText={practiceSubtitle.text}
-          videoId={selectedVideo?.id}
-          onClose={() => {
-            setPracticeSubtitle(null);
-            setPracticeSubtitleIndex(null);
-            playerRef.current?.play(); // Resume on close
-          }}
-          onSuccess={handleAssessmentSuccess}
-        />
-      )}
+      {
+        practiceSubtitle && (
+          <ProfessionalAssessment
+            originalText={practiceSubtitle.text}
+            videoId={selectedVideo?.id}
+            onClose={() => {
+              setPracticeSubtitle(null);
+              setPracticeSubtitleIndex(null);
+              playerRef.current?.play(); // Resume on close
+            }}
+            onSuccess={handleAssessmentSuccess}
+          />
+        )
+      }
 
       {/* 查词 */}
-      {lookupWord && (
-        <WordLookup
-          word={lookupWord.word}
-          context={lookupWord.context}
-          onClose={() => setLookupWord(null)}
-        />
-      )}
+      {
+        lookupWord && (
+          <WordLookup
+            word={lookupWord.word}
+            context={lookupWord.context}
+            onClose={() => setLookupWord(null)}
+          />
+        )
+      }
     </>
   );
 };

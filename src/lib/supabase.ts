@@ -1,6 +1,36 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getActiveSupabaseUrl } from "@/integrations/supabase/client";
 
 export { supabase };
+
+// Get the Supabase URL dynamically
+const getSupabaseUrl = () => getActiveSupabaseUrl();
+
+/**
+ * 动态构建存储URL
+ * 如果URL是完整的URL，则替换其中的主机部分为当前配置的Supabase URL
+ * 如果是相对路径，则拼接完整URL
+ */
+export const getStorageUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+
+  const supabaseUrl = getSupabaseUrl();
+
+  // 如果是相对路径，直接拼接
+  if (!url.startsWith('http')) {
+    return `${supabaseUrl}/storage/v1/object/public/${url}`;
+  }
+
+  // 如果是完整URL，替换主机部分
+  try {
+    const urlObj = new URL(url);
+    const currentUrlObj = new URL(supabaseUrl);
+    urlObj.protocol = currentUrlObj.protocol;
+    urlObj.host = currentUrlObj.host;
+    return urlObj.toString();
+  } catch {
+    return url;
+  }
+};
 
 export type Profile = {
   id: string;

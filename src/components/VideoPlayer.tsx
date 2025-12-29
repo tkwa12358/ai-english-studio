@@ -207,6 +207,12 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
           src={videoUrl}
           className="w-full h-full object-contain"
           onClick={togglePlay}
+          playsInline={true}
+          webkit-playsinline="true"
+          x5-playsinline="true"
+          x-webkit-airplay="allow"
+          controls={false}
+          preload="metadata"
         />
 
         {/* Subtitle Overlay */}

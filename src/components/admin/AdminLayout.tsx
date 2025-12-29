@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   BookOpen,
   Crown,
+  Languages,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,7 @@ const navItems = [
   { path: '/admin/auth-codes', label: '授权码管理', icon: Key },
   { path: '/admin/professional', label: '专业评测', icon: Crown },
   { path: '/admin/dictionary', label: '词库管理', icon: BookOpen },
+  { path: '/admin/translation', label: '翻译配置', icon: Languages },
 ];
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
