@@ -12,6 +12,7 @@ import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Loader2, ChevronLeft, Clock, CheckCircle2, Languages } from 'lucide-react';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const Learn = () => {
   const { videoId } = useParams();
@@ -32,7 +33,7 @@ const Learn = () => {
   });
   const [practiceSubtitle, setPracticeSubtitle] = useState<Subtitle | null>(null);
   const [practiceSubtitleIndex, setPracticeSubtitleIndex] = useState<number | null>(null);
-  const [lookupWord, setLookupWord] = useState<{ word: string; context: string } | null>(null);
+  const [lookupWord, setLookupWord] = useState<{ word: string; context: string; contextTranslation: string } | null>(null);
   const lastSaveTimeRef = useRef<number>(0);
 
   // 学习进度追踪
@@ -317,7 +318,7 @@ const Learn = () => {
                         const index = subtitles.findIndex(s => s === subtitle);
                         handlePractice(subtitle, index);
                       }}
-                      onAddWord={(word, context) => setLookupWord({ word, context })}
+                      onAddWord={(word, context, contextTranslation) => setLookupWord({ word, context, contextTranslation })}
                       showTranslation={showTranslation}
                       completedSentences={progress?.completed_sentences || []}
                     />
@@ -348,11 +349,21 @@ const Learn = () => {
       {/* 查词 */}
       {
         lookupWord && (
-          <WordLookup
-            word={lookupWord.word}
-            context={lookupWord.context}
-            onClose={() => setLookupWord(null)}
-          />
+          <ErrorBoundary fallback={
+            <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
+              <div className="bg-card p-6 border rounded-lg shadow-lg text-center">
+                <p className="mb-4 font-medium">查词遇到问题 ({lookupWord.word})</p>
+                <Button onClick={() => setLookupWord(null)}>关闭</Button>
+              </div>
+            </div>
+          }>
+            <WordLookup
+              word={lookupWord.word}
+              context={lookupWord.context}
+              contextTranslation={lookupWord.contextTranslation}
+              onClose={() => setLookupWord(null)}
+            />
+          </ErrorBoundary>
         )
       }
     </>

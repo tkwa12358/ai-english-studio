@@ -39,11 +39,11 @@ interface AssessmentResult {
   billing_error?: string;
 }
 
-export const ProfessionalAssessment = ({ 
-  originalText, 
-  onClose, 
-  videoId, 
-  onSuccess 
+export const ProfessionalAssessment = ({
+  originalText,
+  onClose,
+  videoId,
+  onSuccess
 }: ProfessionalAssessmentProps) => {
   const { profile, refreshProfile } = useAuth();
   const { toast } = useToast();
@@ -55,11 +55,12 @@ export const ProfessionalAssessment = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // 获取专业评测剩余时间
+  // 获取专业评测剩余时间（数据库存储为分钟，显示为秒）
   const professionalMinutes = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
+  const professionalSeconds = Math.floor(professionalMinutes * 60); // 转换为秒显示
 
   const startRecording = async () => {
-    if (professionalMinutes <= 0) {
+    if (professionalSeconds <= 0) {
       toast({
         variant: 'destructive',
         title: '专业评测时间不足',
@@ -70,19 +71,19 @@ export const ProfessionalAssessment = ({
 
     try {
       setError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
-        } 
+        }
       });
-      
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       });
-      
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -118,24 +119,33 @@ export const ProfessionalAssessment = ({
   };
 
   const submitForAssessment = async () => {
-    if (!audioBlob) return;
+    console.log('submitForAssessment called, audioBlob:', audioBlob);
+    if (!audioBlob) {
+      console.error('No audioBlob available!');
+      return;
+    }
 
+    console.log('Starting assessment processing...');
     setIsProcessing(true);
     setError(null);
 
     try {
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
-      
+
       reader.onloadend = async () => {
+        console.log('FileReader onloadend triggered');
         const base64Audio = reader.result as string;
-        
+        console.log('Audio base64 length:', base64Audio.length);
+
+        console.log('Calling professional-assessment Edge Function...');
         const { data, error: funcError } = await supabase.functions.invoke('professional-assessment', {
           body: {
             audio_base64: base64Audio.split(',')[1],
             original_text: originalText,
           },
         });
+        console.log('Edge function response:', data, 'Error:', funcError);
 
         if (funcError) throw funcError;
 
@@ -152,7 +162,7 @@ export const ProfessionalAssessment = ({
           // 评测成功
           setResult(data);
           await refreshProfile();
-          
+
           if (data.billing_error) {
             toast({
               variant: 'default',
@@ -162,10 +172,10 @@ export const ProfessionalAssessment = ({
           } else {
             toast({
               title: '专业评测完成',
-              description: `总分: ${data.overall_score}分，已扣除${data.minutes_used}分钟`,
+              description: `总分: ${data.overall_score}分，已扣除${data.seconds_used || Math.round(data.minutes_used * 60)}秒`,
             });
           }
-          
+
           if (onSuccess && data.overall_score) {
             onSuccess(data.overall_score);
           }
@@ -213,7 +223,7 @@ export const ProfessionalAssessment = ({
           <h2 className="text-xl font-bold">专业语音评测</h2>
           <Badge variant="secondary" className="ml-auto">音素级评分</Badge>
         </div>
-        
+
         {/* Original Text */}
         <div className="border-2 border-primary p-4 mb-6 bg-primary/5">
           <p className="text-sm text-muted-foreground mb-1">请朗读以下内容：</p>
@@ -257,8 +267,8 @@ export const ProfessionalAssessment = ({
                     重新录制
                   </Button>
                 </div>
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   onClick={submitForAssessment}
                   disabled={isProcessing}
                   className="w-full bg-primary"
@@ -277,12 +287,12 @@ export const ProfessionalAssessment = ({
                 </Button>
               </div>
             )}
-            
+
             <p className="text-sm text-muted-foreground mt-4">
               {isRecording ? '点击停止录音' : audioBlob ? '' : '点击开始录音'}
             </p>
             <p className="text-xs text-primary mt-2 font-medium">
-              专业评测剩余: {professionalMinutes}分钟
+              专业评测剩余: {professionalSeconds}秒
             </p>
           </div>
         )}
@@ -366,8 +376,8 @@ export const ProfessionalAssessment = ({
         {/* Actions */}
         <div className="flex gap-4">
           {result && (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="flex-1"
               onClick={() => {
                 setResult(null);

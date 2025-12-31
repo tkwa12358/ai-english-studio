@@ -4,7 +4,7 @@ interface CachedWord {
   word: string;
   phonetic: string;
   translation: string;
-  definitions: { partOfSpeech: string; definition: string }[];
+  definitions: { partOfSpeech: string; definition: string; example?: string }[];
   cachedAt: number;
 }
 
@@ -56,21 +56,95 @@ export const getFromLocalCache = (word: string): CachedWord | null => {
   return cache[word.toLowerCase()] || null;
 };
 
-// 数据库缓存操作
+// Helper for simple lemmatization
+const getWordVariations = (word: string): string[] => {
+  const w = word.toLowerCase();
+  const forms = new Set([w]);
+
+  // Plural to Singular rules
+  if (w.endsWith('s')) forms.add(w.slice(0, -1));
+  if (w.endsWith('es')) forms.add(w.slice(0, -2));
+  if (w.endsWith('ies')) forms.add(w.slice(0, -3) + 'y');
+  if (w.endsWith('ves')) forms.add(w.slice(0, -3) + 'f');
+  if (w.endsWith('ves')) forms.add(w.slice(0, -3) + 'fe');
+
+  // Verb forms
+  if (w.endsWith('ing')) forms.add(w.slice(0, -3));
+  if (w.endsWith('ed')) forms.add(w.slice(0, -2));
+  if (w.endsWith('d')) forms.add(w.slice(0, -1));
+
+  return Array.from(forms);
+};
+
+const sanitizeDefinitions = (defs: any[]) => {
+  if (!Array.isArray(defs)) return [];
+  const hasChinese = (text: string) => /[\u4e00-\u9fa5]/.test(text);
+  return defs.map(d => {
+    if (!d) return null;
+    let definition = d.definition;
+    let partOfSpeech = d.partOfSpeech || 'unknown';
+    let example = d.example || '';
+
+    // 1. Handle stringified JSON (nested corruption)
+    if (typeof definition === 'string' && definition.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(definition);
+        if (parsed && typeof parsed === 'object') {
+          definition = parsed.definition || parsed.translation || definition;
+          if (parsed.partOfSpeech && partOfSpeech === 'unknown') partOfSpeech = parsed.partOfSpeech;
+        }
+      } catch { }
+    }
+
+    // 2. Handle object format
+    if (typeof definition === 'object' && definition !== null) {
+      definition = definition.definition || definition.translation || JSON.stringify(definition);
+    }
+
+    // Safety cast
+    definition = String(definition || '');
+
+    // Clean up 'unknown' if it's the only info (optional, or keeps it)
+
+    return {
+      partOfSpeech,
+      definition,
+      example
+    };
+  })
+    .filter(d => d && d.definition && d.definition !== '{}' && d.definition !== 'undefined')
+    // 3. User Request: Filter out pure English definitions (long descriptions)
+    .filter(d => {
+      // If it contains Chinese, keep it.
+      if (hasChinese(d.definition)) return true;
+      // If no Chinese, and length > 30 (likely a sentence/description), remove it
+      if (d.definition.length > 30) return false;
+      // Also remove if it looks like json
+      if (d.definition.includes('{"')) return false;
+
+      return true;
+    });
+};
+
+// 数据库缓存操作 - 支持变体查询
 export const getFromDbCache = async (word: string) => {
+  const variations = getWordVariations(word);
+
+  // 使用 in 查询一次性匹配所有变体
   const { data, error } = await supabase
     .from('word_cache')
     .select('*')
-    .eq('word', word.toLowerCase())
-    .maybeSingle();
+    .in('word', variations)
+    .limit(1); // 只要找到一个匹配的即可
 
-  if (error || !data) return null;
+  if (error || !data || data.length === 0) return null;
+  const result = data[0];
 
   return {
-    word: data.word,
-    phonetic: data.phonetic || '',
-    translation: data.translation || '',
-    definitions: (data.definitions as { partOfSpeech: string; definition: string }[]) || [],
+    word: result.word,
+    phonetic: result.phonetic || '',
+    translation: result.translation || '',
+    definitions: sanitizeDefinitions((result.definitions as any[]) || []),
   };
 };
 
@@ -78,7 +152,7 @@ export const saveToDbCache = async (wordData: {
   word: string;
   phonetic: string;
   translation: string;
-  definitions: { partOfSpeech: string; definition: string }[];
+  definitions: { partOfSpeech: string; definition: string; example?: string }[];
 }) => {
   const { error } = await supabase.from('word_cache').upsert(
     {
@@ -99,14 +173,14 @@ export const fetchFromApi = async (word: string) => {
     word,
     phonetic: '',
     translation: '',
-    definitions: [] as { partOfSpeech: string; definition: string }[],
+    definitions: [] as { partOfSpeech: string; definition: string; example?: string }[],
   };
 
   try {
     // 1. 尝试 Free Dictionary API (English Definitions & Phonetic)
     try {
       const response = await fetch(
-        `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`
       );
 
       if (response.ok) {
@@ -117,6 +191,7 @@ export const fetchFromApi = async (word: string) => {
         wordInfo.definitions = entry.meanings?.slice(0, 3).map((m: any) => ({
           partOfSpeech: m.partOfSpeech,
           definition: m.definitions?.[0]?.definition || '',
+          example: m.definitions?.[0]?.example || '', // Capture example
         })) || [];
       }
     } catch (e) {
@@ -139,13 +214,36 @@ export const fetchFromApi = async (word: string) => {
       }
       // 如果缺少定义，或者想要补充中文定义，这里我们可以合并或优先展示中文
       if (translationData.definitions && Array.isArray(translationData.definitions)) {
-        const aiDefs = translationData.definitions.map((def: string) => ({
-          partOfSpeech: translationData.partOfSpeech || 'unknown',
-          definition: def // Chinese definitions from AI
-        }));
-        // Add to top if English defs exist, or replace?
-        // User wants Chinese. Let's prepend.
-        wordInfo.definitions = [...aiDefs, ...wordInfo.definitions];
+        try {
+          console.log('Backend returned definitions:', translationData.definitions);
+          const backendDefs = translationData.definitions
+            .map((def: any) => {
+              if (!def) return null;
+              if (typeof def === 'string') {
+                return {
+                  partOfSpeech: translationData.partOfSpeech || 'unknown',
+                  definition: def,
+                  example: ''
+                };
+              }
+              // Handle object format
+              return {
+                partOfSpeech: def.partOfSpeech || 'unknown',
+                definition: def.definition || '',
+                example: def.example || ''
+              };
+            })
+            .filter((d: any) => d !== null); // Filter out nulls
+
+          // Deduplicate based on definition text
+          const existingDefs = new Set(wordInfo.definitions.map(d => d.definition));
+          const newDefs = backendDefs.filter((d: any) => d && !existingDefs.has(d.definition));
+
+          // Append unique backend definitions
+          wordInfo.definitions = [...wordInfo.definitions, ...newDefs];
+        } catch (err) {
+          console.error('Error processing backend definitions:', err);
+        }
       }
     } else {
       // 3. Fallback: MyMemory API (Free, no key) if AI fails
@@ -186,7 +284,7 @@ export const lookupWord = async (word: string) => {
   // 1. 先查本地缓存
   const localCached = getFromLocalCache(normalizedWord);
   if (localCached && localCached.translation && hasChinese(localCached.translation)) {
-    return { ...localCached, source: 'local' as const };
+    return { ...localCached, definitions: sanitizeDefinitions(localCached.definitions || []), source: 'local' as const };
   }
 
   // 2. 查数据库缓存
@@ -210,7 +308,7 @@ export const lookupWord = async (word: string) => {
     // 存入数据库和本地缓存
     await saveToDbCache(apiResult);
     setLocalCache(normalizedWord, apiResult);
-    return { ...apiResult, source: 'api' as const };
+    return { ...apiResult, definitions: sanitizeDefinitions(apiResult.definitions || []), source: 'api' as const };
   }
 
   // If API failed but we had DB record (even without translation), return it as last resort

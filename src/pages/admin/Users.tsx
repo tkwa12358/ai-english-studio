@@ -16,6 +16,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -24,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Pencil, Crown } from 'lucide-react';
+import { Pencil, Crown, Key } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -47,7 +49,9 @@ const AdminUsers: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ExtendedProfile | null>(null);
+  const [userToReset, setUserToReset] = useState<ExtendedProfile | null>(null);
   const [formData, setFormData] = useState({
     display_name: '',
     role: 'user',
@@ -80,6 +84,29 @@ const AdminUsers: React.FC = () => {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke('admin-action', {
+        body: { action: 'reset_password', userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: '密码已重置',
+        description: '密码已重置为: SpeakAI@123',
+        duration: 5000
+      });
+      setResetDialogOpen(false);
+      setUserToReset(null);
+    },
+    onError: (error) => {
+      toast({ title: '重置失败', description: error.message, variant: 'destructive' });
+    }
+  });
+
   const handleEdit = (user: ExtendedProfile) => {
     setEditingUser(user);
     setFormData({
@@ -88,6 +115,17 @@ const AdminUsers: React.FC = () => {
       professional_voice_minutes: user.professional_voice_minutes || 0,
     });
     setIsOpen(true);
+  };
+
+  const handleResetClick = (user: ExtendedProfile) => {
+    setUserToReset(user);
+    setResetDialogOpen(true);
+  };
+
+  const confirmReset = () => {
+    if (userToReset) {
+      resetPasswordMutation.mutate(userToReset.user_id);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -124,11 +162,10 @@ const AdminUsers: React.FC = () => {
                 <TableCell>{user.display_name || '-'}</TableCell>
                 <TableCell>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      user.role === 'admin'
+                    className={`px-2 py-1 rounded-full text-xs ${user.role === 'admin'
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted text-muted-foreground'
-                    }`}
+                      }`}
                   >
                     {user.role === 'admin' ? '管理员' : '用户'}
                   </span>
@@ -141,9 +178,19 @@ const AdminUsers: React.FC = () => {
                 </TableCell>
                 <TableCell>{format(new Date(user.created_at), 'yyyy-MM-dd HH:mm')}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleResetClick(user)}
+                      title="重置密码"
+                    >
+                      <Key className="h-4 w-4 text-orange-500" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -168,7 +215,7 @@ const AdminUsers: React.FC = () => {
                 <Label htmlFor="role">角色</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value) => setFormData({ ...formData, role: value })}
+                  onValueChange={(value) => setFormData({ ...formData, role: value as any })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -192,6 +239,26 @@ const AdminUsers: React.FC = () => {
                 保存
               </Button>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* 密码重置确认对话框 */}
+        <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>确认重置密码</DialogTitle>
+              <DialogDescription>
+                您确定要重置用户 {userToReset?.phone || userToReset?.display_name} 的密码吗？
+                <br />
+                重置后的密码将为：<span className="font-bold text-primary">SpeakAI@123</span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setResetDialogOpen(false)}>取消</Button>
+              <Button variant="destructive" onClick={confirmReset} disabled={resetPasswordMutation.isPending}>
+                {resetPasswordMutation.isPending ? '重置中...' : '确认重置'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

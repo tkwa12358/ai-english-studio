@@ -9,6 +9,7 @@ import { lookupWord } from '@/lib/wordCache';
 interface WordLookupProps {
   word: string;
   context: string;
+  contextTranslation?: string;
   onClose: () => void;
 }
 
@@ -16,10 +17,10 @@ interface WordInfo {
   word: string;
   phonetic: string;
   translation: string;
-  definitions: { partOfSpeech: string; definition: string }[];
+  definitions: { partOfSpeech: string; definition: string; example?: string }[];
 }
 
-export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
+export const WordLookup = ({ word, context, contextTranslation, onClose }: WordLookupProps) => {
   const [loading, setLoading] = useState(true);
   const [wordInfo, setWordInfo] = useState<WordInfo | null>(null);
   const [saving, setSaving] = useState(false);
@@ -27,6 +28,7 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log('WordLookup: Looking up word:', word);
     const fetchWordInfo = async () => {
       try {
         const result = await lookupWord(word);
@@ -77,14 +79,14 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
         word: wordInfo.word,
         phonetic: wordInfo.phonetic,
         translation: wordInfo.translation,
-        context,
+        context: '', // 用户要求不保存例句
       });
 
       if (error) throw error;
 
       toast({
         title: '已添加到单词本',
-        description: wordInfo.word,
+        description: `${wordInfo.word} ${wordInfo.phonetic ? `[${wordInfo.phonetic}]` : ''}`,
       });
       onClose();
     } catch (error) {
@@ -117,39 +119,63 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-8 h-8 animate-spin" />
+            <span className="ml-2 text-muted-foreground">正在查询...</span>
           </div>
         ) : wordInfo ? (
           <div className="space-y-4">
             {wordInfo.phonetic && (
-              <p className="text-muted-foreground font-mono">{wordInfo.phonetic}</p>
+              <p className="text-muted-foreground font-mono">[{wordInfo.phonetic}]</p>
             )}
 
             {wordInfo.translation && (
-              <div className="border-2 border-foreground p-3 bg-accent">
-                <p className="font-medium">{wordInfo.translation}</p>
+              <div className="border-2 border-foreground p-3 bg-accent rounded-md">
+                <p className="font-medium text-lg">{wordInfo.translation}</p>
               </div>
             )}
 
-            {wordInfo.definitions.length > 0 && (
-              <div className="space-y-2">
-                {wordInfo.definitions.map((def, idx) => (
-                  <div key={idx} className="text-sm">
-                    <span className="text-muted-foreground italic">{def.partOfSpeech}</span>
-                    <p className="mt-1">{def.definition}</p>
-                  </div>
-                ))}
+            {wordInfo.definitions && Array.isArray(wordInfo.definitions) && wordInfo.definitions.length > 0 && (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                {wordInfo.definitions.map((def, idx) => {
+                  // Defensive check
+                  if (!def) return null;
+
+                  // Helper to safely render content
+                  const safeRender = (val: any) => {
+                    if (typeof val === 'string' || typeof val === 'number') return val;
+                    if (typeof val === 'object') return JSON.stringify(val);
+                    return '';
+                  };
+
+                  return (
+                    <div key={idx} className="text-sm border-b border-border/50 last:border-0 pb-2 last:pb-0">
+                      {safeRender(def.partOfSpeech) !== 'unknown' && (
+                        <span className="text-muted-foreground italic font-semibold mr-2">{safeRender(def.partOfSpeech)}</span>
+                      )}
+                      <span className="text-foreground/90">{safeRender(def.definition)}</span>
+                      {def.example && (
+                        <p className="text-xs text-muted-foreground mt-1 ml-2 pl-2 border-l-2 border-primary/30">
+                          {safeRender(def.example)}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
 
+            {/* 上下文参考 */}
             {context && (
-              <div className="text-sm">
-                <p className="text-muted-foreground mb-1">例句：</p>
-                <p className="italic">{context}</p>
+              <div className="border-t border-border pt-3 mt-3">
+                <p className="text-xs text-muted-foreground mb-1">📝 上下文参考</p>
+                <p className="text-sm text-foreground/80 italic">{context}</p>
+                {contextTranslation && (
+                  <p className="text-sm text-primary mt-1">→ {contextTranslation}</p>
+                )}
               </div>
             )}
 
-            <Button 
-              className="w-full" 
+            <Button
+              className="w-full mt-4"
               onClick={addToWordbook}
               disabled={saving || !user}
             >
@@ -158,7 +184,7 @@ export const WordLookup = ({ word, context, onClose }: WordLookupProps) => {
               ) : (
                 <BookPlus className="w-4 h-4 mr-2" />
               )}
-              添加到单词本
+              {user ? '添加到单词本' : '登录后添加'}
             </Button>
           </div>
         ) : (

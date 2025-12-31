@@ -11,7 +11,7 @@ interface SubtitleListProps {
   currentSubtitle: Subtitle | null;
   onSubtitleClick: (subtitle: Subtitle) => void;
   onPractice: (subtitle: Subtitle) => void;
-  onAddWord: (word: string, context: string) => void;
+  onAddWord: (word: string, context: string, contextTranslation: string) => void;
   showTranslation?: boolean;
   completedSentences?: number[];
 }
@@ -45,11 +45,11 @@ export const SubtitleList = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleWordClick = (word: string, context: string, e: React.MouseEvent) => {
+  const handleWordClick = (word: string, context: string, contextTranslation: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const cleanWord = word.replace(/[^a-zA-Z'-]/g, '');
     if (cleanWord) {
-      onAddWord(cleanWord, context);
+      onAddWord(cleanWord, context, contextTranslation);
     }
   };
 
@@ -60,15 +60,15 @@ export const SubtitleList = ({
           const isActive = currentSubtitle?.id === subtitle.id;
           const translation = getTranslation(subtitle);
           const isCompleted = completedSentences.includes(index);
-          
+
           return (
             <div
               key={subtitle.id}
               ref={isActive ? activeRef : null}
               className={cn(
                 "p-3 rounded-xl transition-all cursor-pointer border-l-4",
-                isActive 
-                  ? "bg-primary/10 border-l-primary shadow-sm" 
+                isActive
+                  ? "bg-primary/10 border-l-primary shadow-sm"
                   : isCompleted
                     ? "bg-primary/5 border-l-primary/50"
                     : "bg-card/50 border-l-transparent hover:bg-accent/30"
@@ -90,7 +90,7 @@ export const SubtitleList = ({
                       <span
                         key={idx}
                         className="hover:bg-primary/20 hover:text-primary px-0.5 rounded cursor-pointer transition-colors"
-                        onClick={(e) => handleWordClick(word, subtitle.text, e)}
+                        onClick={(e) => handleWordClick(word, subtitle.text, translation?.text || '', e)}
                       >
                         {word}{' '}
                       </span>
@@ -102,12 +102,12 @@ export const SubtitleList = ({
                     </p>
                   )}
                 </div>
-                
+
                 <div className="flex flex-col gap-1.5 shrink-0">
                   {/* 播放按钮 */}
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="h-7 px-2 rounded-lg hover:bg-primary/10 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -119,7 +119,7 @@ export const SubtitleList = ({
                     <span className="hidden sm:inline">播放</span>
                   </Button>
                   {/* 跟读练习按钮 */}
-                  <Button 
+                  <Button
                     variant="outline"
                     size="sm"
                     className="h-7 px-2 rounded-lg hover:bg-accent/50 text-xs border-primary/30 hover:border-primary"

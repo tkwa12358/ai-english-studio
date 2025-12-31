@@ -93,7 +93,7 @@ const AdminProfessionalProviders: React.FC = () => {
       const configJson: { api_key?: string; api_secret?: string } = {};
       if (data.api_key) configJson.api_key = data.api_key;
       if (data.api_secret) configJson.api_secret = data.api_secret;
-      
+
       const { error } = await supabase.from('professional_assessment_providers').insert([{
         name: data.name,
         provider_type: data.provider_type,
@@ -130,7 +130,7 @@ const AdminProfessionalProviders: React.FC = () => {
         priority: number;
         config_json?: Json;
       }
-      
+
       const updateData: UpdatePayload = {
         name: data.name,
         provider_type: data.provider_type,
@@ -140,7 +140,7 @@ const AdminProfessionalProviders: React.FC = () => {
         is_default: data.is_default,
         priority: data.priority,
       };
-      
+
       // 如果输入了新的 API Key，更新 config_json
       if (data.api_key || data.api_secret) {
         const configJson: { api_key?: string; api_secret?: string } = {};
@@ -148,7 +148,7 @@ const AdminProfessionalProviders: React.FC = () => {
         if (data.api_secret) configJson.api_secret = data.api_secret;
         updateData.config_json = configJson;
       }
-      
+
       const { error } = await supabase
         .from('professional_assessment_providers')
         .update(updateData)
@@ -286,7 +286,7 @@ const AdminProfessionalProviders: React.FC = () => {
                 添加服务商
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingProvider ? '编辑服务商' : '添加服务商'}</DialogTitle>
               </DialogHeader>
@@ -307,8 +307,8 @@ const AdminProfessionalProviders: React.FC = () => {
                     value={formData.provider_type}
                     onValueChange={(value) => {
                       const defaults = getProviderDefaults(value);
-                      setFormData({ 
-                        ...formData, 
+                      setFormData({
+                        ...formData,
                         provider_type: value,
                         ...defaults,
                       });
@@ -384,7 +384,7 @@ const AdminProfessionalProviders: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, api_secret: e.target.value })}
                     placeholder={
                       formData.provider_type === 'azure' ? '' :
-                      editingProvider ? '留空表示不修改' : '请输入 API Secret'
+                        editingProvider ? '留空表示不修改' : '请输入 API Secret'
                     }
                     disabled={formData.provider_type === 'azure'}
                   />
@@ -478,11 +478,10 @@ const AdminProfessionalProviders: React.FC = () => {
                 <TableCell>{provider.priority}</TableCell>
                 <TableCell>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      provider.is_active
+                    className={`px-2 py-1 rounded-full text-xs ${provider.is_active
                         ? 'bg-green-100 text-green-800'
                         : 'bg-muted text-muted-foreground'
-                    }`}
+                      }`}
                   >
                     {provider.is_active ? '启用' : '禁用'}
                   </span>

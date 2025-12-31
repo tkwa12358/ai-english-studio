@@ -58,7 +58,20 @@ serve(async (req) => {
 
     console.log(`Using translation provider: ${provider.provider_type} (${provider.name})`);
 
-    // 2. 根据类型调用不同 API
+    // 2. 尝试获取其定义和音标 (如果是单词)
+    let dictData: any = null;
+    const isSingleWord = text.trim().split(/\s+/).length === 1 && text.length < 50;
+
+    if (isSingleWord && from === 'en') {
+      try {
+        console.log(`Fetching dictionary data for: ${text}`);
+        dictData = await callFreeDictionary(text);
+      } catch (e) {
+        console.warn('Dictionary API failed internally:', e);
+      }
+    }
+
+    // 3. 根据类型调用不同 API
     let result = {
       translation: '',
       phonetic: '',
@@ -68,16 +81,33 @@ serve(async (req) => {
     if (provider.provider_type === 'baidu') {
       result = await callBaiduTranslate(text, from, to, provider.app_id, provider.api_key);
     } else if (provider.provider_type === 'tencent') {
-      // 腾讯翻译实现复杂，需要鉴权签名，暂时返回 TODO 或者简单版
       result.translation = '腾讯翻译暂未实现，请切换到百度';
     } else if (provider.provider_type === 'google' || provider.provider_type === 'microsoft' || provider.provider_type === 'openai') {
-      // 假设这些是用 OpenAI 兼容接口，或者具体的 API
-      // 这里如果配置了 api_key，可以使用通用的 LLM 调用
       if (provider.api_key) {
-        return await callOpenAI(text, provider.api_key, from, to);
+        // OpenAI logic handles its own dictionary lookups usually, but we can still merge if needed
+        // For now, let's trust OpenAI return if it works
+        const openAiRes = await callOpenAI(text, provider.api_key, from, to);
+        // Convert Response to object if we wanna merge? 
+        // callOpenAI returns a Response object.
+        // Returning directly for OpenAI is fine as it's smart.
+        return openAiRes;
       }
     } else {
       throw new Error(`Unsupported provider type: ${provider.provider_type}`);
+    }
+
+    // 4. Merge Dictionary Data (for non-smart providers like Baidu/Tencent)
+    if (dictData) {
+      if (!result.phonetic && dictData.phonetic) {
+        result.phonetic = dictData.phonetic;
+      }
+      // Merge definitions: Dictionary (English) + Translation (Chinese)
+      // Usually Baidu just gives one 'unknown' meaning which is the translation.
+      if (dictData.definitions && dictData.definitions.length > 0) {
+        // Keep Chinese translation at top or separate?
+        // Let's append Dictionary definitions
+        result.definitions = [...(result.definitions || []), ...dictData.definitions];
+      }
     }
 
     // 返回结果
@@ -94,6 +124,23 @@ serve(async (req) => {
     );
   }
 });
+
+// Dictionary API Helper
+async function callFreeDictionary(word: string) {
+  const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+  if (!res.ok) throw new Error('Dict API invalid');
+  const data = await res.json();
+  const entry = data[0];
+
+  return {
+    phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
+    definitions: entry.meanings?.slice(0, 3).map((m: any) => ({
+      partOfSpeech: m.partOfSpeech,
+      definition: m.definitions?.[0]?.definition || '',
+      example: m.definitions?.[0]?.example || ''
+    })) || []
+  };
+}
 
 // 百度翻译实现
 async function callBaiduTranslate(q: string, from: string, to: string, appId: string, secretKey: string) {
@@ -116,12 +163,10 @@ async function callBaiduTranslate(q: string, from: string, to: string, appId: st
 
   const translation = data.trans_result?.[0]?.dst || '';
 
-  // 百度通用翻译接口不返回音标和定义，只作为基础翻译
-  // 如果需要音标，可能需要调用"百度词典"或其他接口，或者单纯依赖前端已有的 fallback
   return {
     translation,
-    phonetic: '', // 百度通用翻译不提供
-    definitions: [{ partOfSpeech: 'unknown', definition: translation }]
+    phonetic: '',
+    definitions: [] // Empty by default, let main handler fill from Dict API
   };
 }
 

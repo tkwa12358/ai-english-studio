@@ -60,10 +60,10 @@ async function callAzureAssessment(
   language: string
 ): Promise<AssessmentResult> {
   // 优先从 config_json 读取密钥，其次从环境变量
-  const subscriptionKey = provider.config_json?.api_key || 
+  const subscriptionKey = provider.config_json?.api_key ||
     Deno.env.get(provider.api_key_secret_name || 'AZURE_SPEECH_KEY');
   const region = provider.region || 'eastasia';
-  
+
   if (!subscriptionKey) {
     throw new Error('Azure Speech API 密钥未配置，请在管理后台设置');
   }
@@ -84,7 +84,7 @@ async function callAzureAssessment(
   const pronunciationAssessmentHeader = btoa(JSON.stringify(pronunciationAssessmentConfig));
 
   const endpoint = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1`;
-  
+
   const url = new URL(endpoint);
   url.searchParams.set('language', language === 'zh-CN' ? 'zh-CN' : 'en-US');
   url.searchParams.set('format', 'detailed');
@@ -166,18 +166,18 @@ async function callTencentSOEAssessment(
   language: string
 ): Promise<AssessmentResult> {
   // 优先从 config_json 读取密钥，其次从环境变量
-  const secretId = provider.config_json?.api_key || 
+  const secretId = provider.config_json?.api_key ||
     Deno.env.get(provider.api_key_secret_name || 'TENCENT_SOE_SECRET_ID');
-  const secretKey = provider.config_json?.api_secret || 
+  const secretKey = provider.config_json?.api_secret ||
     Deno.env.get(provider.api_secret_key_name || 'TENCENT_SOE_SECRET_KEY');
-  
+
   if (!secretId || !secretKey) {
     throw new Error('腾讯 SOE API 密钥未配置，请在管理后台设置');
   }
 
   const host = "soe.tencentcloudapi.com";
   const service = "soe";
-  const action = "TransmitOralProcess";
+  const action = "TransmitOralProcessWithInit"; // 使用带初始化的接口
   const version = "2018-07-24";
   const timestamp = Math.floor(Date.now() / 1000);
   const date = new Date(timestamp * 1000).toISOString().split('T')[0];
@@ -185,18 +185,20 @@ async function callTencentSOEAssessment(
   // 生成 SessionId
   const sessionId = crypto.randomUUID();
 
-  // 请求体
+  // 请求体 - 使用 TransmitOralProcessWithInit 的参数格式
   const payload = JSON.stringify({
     SeqId: 1,
     IsEnd: 1,
     SessionId: sessionId,
-    VoiceFileType: 3, // webm
-    VoiceEncodeType: 1, // 音频格式
+    VoiceFileType: 3, // webm = 3
+    VoiceEncodeType: 1, // opus = 1
     UserVoiceData: audio_base64,
     RefText: original_text,
-    WorkMode: 0, // 流式评测
-    EvalMode: 2, // 句子模式
+    WorkMode: 0, // 流式传输
+    EvalMode: language === 'zh-CN' ? 1 : 2, // 中文用1句子模式，英文用2句子模式
     ScoreCoeff: 1.0,
+    SoeAppId: "", // 可选，空字符串表示使用默认
+    StorageMode: 0, // 不存储音频
   });
 
   // 腾讯云签名 v3
@@ -231,7 +233,7 @@ async function callTencentSOEAssessment(
       'X-TC-Action': action,
       'X-TC-Version': version,
       'X-TC-Timestamp': timestamp.toString(),
-      'X-TC-Region': provider.region || 'ap-guangzhou',
+      // SOE API 不需要 Region 参数，移除以避免无效 Region 错误
       'Authorization': authorization,
     },
     body: payload,
@@ -284,12 +286,12 @@ async function callIFlyAssessment(
   language: string
 ): Promise<AssessmentResult> {
   // 优先从 config_json 读取密钥，其次从环境变量
-  const appId = provider.config_json?.api_key || 
+  const appId = provider.config_json?.api_key ||
     Deno.env.get(provider.api_key_secret_name || 'IFLY_APP_ID');
-  const apiKey = provider.config_json?.api_secret || 
+  const apiKey = provider.config_json?.api_secret ||
     Deno.env.get(provider.api_secret_key_name || 'IFLY_API_KEY');
   const apiSecret = Deno.env.get('IFLY_API_SECRET');
-  
+
   if (!appId || !apiKey) {
     throw new Error('讯飞 API 密钥未配置，请在管理后台设置');
   }
@@ -309,7 +311,7 @@ function generateFeedback(assessment: {
   CompletenessScore?: number;
 }, wordsResult?: Array<{ word: string; accuracy_score: number; error_type?: string }>) {
   const feedback: string[] = [];
-  
+
   if (assessment.AccuracyScore !== undefined) {
     if (assessment.AccuracyScore >= 90) {
       feedback.push('发音非常准确！');
@@ -344,7 +346,7 @@ function generateSOEFeedback(resp: {
   SuggestedScore?: number;
 }, wordsResult?: Array<{ word: string; accuracy_score: number }>) {
   const feedback: string[] = [];
-  
+
   if (resp.SuggestedScore !== undefined) {
     if (resp.SuggestedScore >= 90) {
       feedback.push('发音非常标准！');
@@ -461,7 +463,7 @@ serve(async (req) => {
 
     if (remainingMinutes <= 0) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: '专业评测时间已用完，请购买授权码充值',
           remaining_minutes: 0,
           billed: false,
@@ -492,7 +494,7 @@ serve(async (req) => {
     if (providerError || !provider) {
       console.error('Provider error:', providerError);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: '专业评测服务未配置，请联系管理员',
           billed: false,
         }),
@@ -516,13 +518,16 @@ serve(async (req) => {
     try {
       // 调用专业评测服务
       assessmentResult = await callAssessmentProvider(provider, audio_base64, original_text, language);
-      
-      // 评测成功，计费
-      const durationSeconds = Math.ceil((Date.now() - startTime) / 1000) + 10; // 加上估计录音时间
-      const minutesUsed = Math.max(1, Math.ceil(durationSeconds / 60));
-      const newRemainingMinutes = Math.max(0, remainingMinutes - minutesUsed);
 
-      // 更新用户专业评测分钟数
+      // 评测成功，按秒计费（更公平的计费方式）
+      const durationSeconds = Math.ceil((Date.now() - startTime) / 1000) + 5; // 加上估计的音频时长
+      const secondsUsed = Math.max(1, durationSeconds); // 最少计费1秒
+      // 将 professional_voice_minutes 当作"秒数"来使用（字段名历史原因保留）
+      const remainingSeconds = remainingMinutes * 60; // 将分钟转换为秒
+      const newRemainingSeconds = Math.max(0, remainingSeconds - secondsUsed);
+      const newRemainingMinutes = newRemainingSeconds / 60; // 转回分钟存储
+
+      // 更新用户专业评测时间（存储单位仍为分钟，但按秒扣除）
       const { error: updateError } = await supabaseAdmin
         .from('profiles')
         .update({ professional_voice_minutes: newRemainingMinutes })
@@ -552,7 +557,7 @@ serve(async (req) => {
           phonemes_result: assessmentResult.phonemes_result,
           feedback: assessmentResult.feedback,
           duration_seconds: durationSeconds,
-          minutes_charged: isBilled ? minutesUsed : 0,
+          minutes_charged: isBilled ? secondsUsed / 60 : 0, // 记录消耗的分钟数
           is_billed: isBilled,
           billing_error: billingError,
           raw_response: assessmentResult.raw_response,
@@ -562,7 +567,9 @@ serve(async (req) => {
         JSON.stringify({
           ...assessmentResult,
           remaining_minutes: newRemainingMinutes,
-          minutes_used: isBilled ? minutesUsed : 0,
+          remaining_seconds: Math.floor(newRemainingSeconds), // 返回剩余秒数
+          seconds_used: isBilled ? secondsUsed : 0, // 返回消耗的秒数
+          minutes_used: isBilled ? Math.round(secondsUsed / 60 * 100) / 100 : 0, // 保留兼容
           billed: isBilled,
           billing_error: billingError,
         }),
@@ -599,7 +606,7 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error('Professional assessment error:', error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: error instanceof Error ? error.message : '评测失败',
         billed: false,
         message: '评测失败，未扣除时间',
