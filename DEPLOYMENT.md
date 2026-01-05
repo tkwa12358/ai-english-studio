@@ -243,6 +243,10 @@ create_directories() {
     mkdir -p volumes/storage
     chmod -R 755 volumes
 
+    # 修复数据库初始化脚本权限（解决 Permission denied 问题）
+    chmod 755 docker/db/init
+    chmod 644 docker/db/init/*.sql 2>/dev/null || true
+
     success "数据目录创建完成"
 }
 
