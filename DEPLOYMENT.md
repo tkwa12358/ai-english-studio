@@ -10,11 +10,12 @@
 1. [系统要求](#1-系统要求)
 2. [一键部署（推荐）](#2-一键部署推荐)
 3. [手动部署步骤](#3-手动部署步骤)
-4. [数据库迁移](#4-数据库迁移)
-5. [生产环境配置](#5-生产环境配置)
-6. [常用运维命令](#6-常用运维命令)
-7. [故障排除](#7-故障排除)
-8. [备份与恢复](#8-备份与恢复)
+4. [管理员初始化](#4-管理员初始化)
+5. [数据库迁移](#5-数据库迁移)
+6. [生产环境配置](#6-生产环境配置)
+7. [常用运维命令](#7-常用运维命令)
+8. [故障排除](#8-故障排除)
+9. [备份与恢复](#9-备份与恢复)
 
 ---
 
@@ -534,9 +535,43 @@ docker compose logs -f
 
 ---
 
-## 4. 数据库迁移
+## 4. 管理员初始化
 
-### 4.1 首次部署执行迁移
+### 4.1 设置管理员账号
+
+部署完成后，需要设置管理员账号才能访问后台管理功能。
+
+**方式1：将第一个注册用户设为管理员（推荐）**
+
+```bash
+cd /opt/ai-english-studio
+
+# 1. 先在前端注册你的账号
+# 2. 执行以下命令将第一个注册的用户设为管理员
+docker compose exec -T db psql -U postgres -d postgres -c "SELECT init_first_admin();"
+```
+
+**方式2：将指定手机号用户设为管理员**
+
+```bash
+cd /opt/ai-english-studio
+
+# 替换 13800138000 为你的手机号
+docker compose exec -T db psql -U postgres -d postgres -c "SELECT set_admin_by_phone('13800138000');"
+```
+
+### 4.2 验证管理员权限
+
+设置完成后：
+1. 刷新页面重新登录
+2. 顶部导航栏应出现「管理后台」入口
+3. 可以访问 `/admin` 路径进入后台
+
+---
+
+## 5. 数据库迁移
+
+### 5.1 首次部署执行迁移
 
 ```bash
 cd /opt/ai-english-studio
@@ -551,7 +586,7 @@ for f in supabase/migrations/*.sql; do
 done
 ```
 
-### 4.2 更新代码后执行新迁移
+### 5.2 更新代码后执行新迁移
 
 ```bash
 cd /opt/ai-english-studio
@@ -571,7 +606,7 @@ done
 docker compose up -d --build frontend
 ```
 
-### 4.3 手动执行单个迁移
+### 5.3 手动执行单个迁移
 
 ```bash
 # 进入数据库
@@ -583,9 +618,9 @@ docker compose exec -T db psql -U postgres -d postgres < supabase/migrations/202
 
 ---
 
-## 5. 生产环境配置
+## 6. 生产环境配置
 
-### 5.1 配置 Nginx 反向代理
+### 6.1 配置 Nginx 反向代理
 
 ```bash
 # 安装 Nginx
@@ -642,7 +677,7 @@ systemctl start nginx
 systemctl enable nginx
 ```
 
-### 5.2 配置 SSL 证书
+### 6.2 配置 SSL 证书
 
 ```bash
 # 安装 certbot
@@ -655,7 +690,7 @@ certbot --nginx -d your-domain.com
 certbot renew --dry-run
 ```
 
-### 5.3 配置第三方 API
+### 6.3 配置第三方 API
 
 编辑 `.env` 文件：
 
@@ -670,9 +705,9 @@ DEEPSEEK_API_KEY=your-deepseek-api-key
 
 ---
 
-## 6. 常用运维命令
+## 7. 常用运维命令
 
-### 6.1 服务管理
+### 7.1 服务管理
 
 ```bash
 cd /opt/ai-english-studio
@@ -700,7 +735,7 @@ docker compose logs -f db                 # 数据库日志
 docker compose logs -f --tail=100         # 最近100行
 ```
 
-### 6.2 使用部署脚本
+### 7.2 使用部署脚本
 
 ```bash
 cd /opt/ai-english-studio
@@ -713,7 +748,7 @@ cd /opt/ai-english-studio
 ./deploy.sh reset     # 重置数据库（危险！）
 ```
 
-### 6.3 更新部署
+### 7.3 更新部署
 
 ```bash
 cd /opt/ai-english-studio
@@ -730,7 +765,7 @@ for f in supabase/migrations/*.sql; do
 done
 ```
 
-### 6.4 数据库操作
+### 7.4 数据库操作
 
 ```bash
 # 进入数据库
@@ -748,9 +783,9 @@ SELECT * FROM videos;        -- 查询视频
 
 ---
 
-## 7. 故障排除
+## 8. 故障排除
 
-### 7.1 服务无法启动
+### 8.1 服务无法启动
 
 ```bash
 # 查看详细日志
@@ -766,7 +801,7 @@ systemctl status docker
 systemctl restart docker
 ```
 
-### 7.2 数据库连接失败
+### 8.2 数据库连接失败
 
 ```bash
 # 检查数据库容器
@@ -782,7 +817,7 @@ docker compose exec db pg_isready -U postgres
 docker compose restart db
 ```
 
-### 7.3 前端无法访问
+### 8.3 前端无法访问
 
 ```bash
 # 检查前端容器
@@ -795,7 +830,7 @@ docker compose logs frontend
 docker compose up -d --build frontend
 ```
 
-### 7.4 SELinux 问题
+### 8.4 SELinux 问题
 
 ```bash
 # 检查 SELinux 状态
@@ -808,7 +843,7 @@ ausearch -m avc -ts recent
 setenforce 0
 ```
 
-### 7.5 磁盘空间不足
+### 8.5 磁盘空间不足
 
 ```bash
 # 查看磁盘使用
@@ -823,9 +858,9 @@ docker image prune -a
 
 ---
 
-## 8. 备份与恢复
+## 9. 备份与恢复
 
-### 8.1 备份数据库
+### 9.1 备份数据库
 
 ```bash
 cd /opt/ai-english-studio
@@ -835,20 +870,20 @@ mkdir -p backups
 docker compose exec -T db pg_dump -U postgres -d postgres | gzip > backups/db_$(date +%Y%m%d_%H%M%S).sql.gz
 ```
 
-### 8.2 备份存储文件
+### 9.2 备份存储文件
 
 ```bash
 tar -czvf backups/storage_$(date +%Y%m%d).tar.gz volumes/storage/
 ```
 
-### 8.3 恢复数据库
+### 9.3 恢复数据库
 
 ```bash
 # 解压并恢复
 gunzip -c backups/db_20260105.sql.gz | docker compose exec -T db psql -U postgres -d postgres
 ```
 
-### 8.4 自动备份脚本
+### 9.4 自动备份脚本
 
 ```bash
 cat > /opt/ai-english-studio/backup.sh << 'EOF'
