@@ -5,9 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Import all function handlers
-import professionalAssessment from "../professional-assessment/index.ts";
-
 serve(async (req: Request) => {
   const url = new URL(req.url);
   const path = url.pathname;
@@ -17,12 +14,7 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Route to appropriate function
-  if (path.startsWith('/professional-assessment')) {
-    return professionalAssessment(req);
-  }
-
-  // Default response
+  // Default response - list available functions
   return new Response(
     JSON.stringify({
       status: 'ok',
@@ -32,7 +24,8 @@ serve(async (req: Request) => {
         '/translate',
         '/redeem-code',
         '/admin-action'
-      ]
+      ],
+      note: 'Each function should be called directly via its own endpoint'
     }),
     {
       headers: {

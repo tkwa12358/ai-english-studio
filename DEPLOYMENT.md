@@ -247,6 +247,10 @@ create_directories() {
     chmod 755 docker/db/init
     chmod 644 docker/db/init/*.sql 2>/dev/null || true
 
+    # 修复 Kong 配置文件权限
+    chmod 755 docker/kong
+    chmod 644 docker/kong/*.yml 2>/dev/null || true
+
     success "数据目录创建完成"
 }
 
