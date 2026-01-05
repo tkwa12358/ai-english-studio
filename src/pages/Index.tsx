@@ -1,11 +1,21 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { Helmet } from 'react-helmet-async';
 import { Play, BookOpen, Mic, Upload } from 'lucide-react';
 
 const Index = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  // 已登录用户直接跳转到学习页面
+  if (!loading && user) {
+    return <Navigate to="/learn" replace />;
+  }
+
+  // 加载中显示空白，避免闪烁
+  if (loading) {
+    return null;
+  }
 
   return (
     <>
@@ -36,21 +46,12 @@ const Index = () => {
               
               {/* CTA Button */}
               <div className="flex justify-center">
-                {user ? (
-                  <Link to="/learn">
-                    <Button size="lg" className="text-xl px-12 py-7 rounded-2xl bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg hover:shadow-xl transition-all">
-                      <Play className="w-6 h-6 mr-3" />
-                      开始学习
-                    </Button>
-                  </Link>
-                ) : (
-                  <Link to="/login">
-                    <Button size="lg" className="text-xl px-12 py-7 rounded-2xl bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg hover:shadow-xl transition-all">
-                      <Play className="w-6 h-6 mr-3" />
-                      开始学习
-                    </Button>
-                  </Link>
-                )}
+                <Link to="/login">
+                  <Button size="lg" className="text-xl px-12 py-7 rounded-2xl bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg hover:shadow-xl transition-all">
+                    <Play className="w-6 h-6 mr-3" />
+                    开始学习
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>

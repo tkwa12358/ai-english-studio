@@ -173,7 +173,7 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Crown className="h-3 w-3 text-primary" />
-                    {user.professional_voice_minutes || 0} 分钟
+                    {user.professional_voice_minutes || 0} 秒
                   </div>
                 </TableCell>
                 <TableCell>{format(new Date(user.created_at), 'yyyy-MM-dd HH:mm')}</TableCell>
@@ -227,7 +227,7 @@ const AdminUsers: React.FC = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="professional_voice_minutes">专业评测时长(分钟)</Label>
+                <Label htmlFor="professional_voice_minutes">专业评测时长(秒)</Label>
                 <Input
                   id="professional_voice_minutes"
                   type="number"

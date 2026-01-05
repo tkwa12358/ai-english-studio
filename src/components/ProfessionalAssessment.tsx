@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { AuthCodeDialog } from '@/components/AuthCodeDialog';
+import { MicPermissionGuide } from '@/components/MicPermissionGuide';
 
 interface ProfessionalAssessmentProps {
   originalText: string;
@@ -33,8 +35,8 @@ interface AssessmentResult {
   completeness_score: number;
   feedback: string;
   words_result?: WordScore[];
-  remaining_minutes: number;
-  minutes_used: number;
+  remaining_seconds: number;
+  seconds_used: number;
   billed: boolean;
   billing_error?: string;
 }
@@ -52,37 +54,67 @@ export const ProfessionalAssessment = ({
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAuthCodeDialog, setShowAuthCodeDialog] = useState(false);
+  const [showPermissionGuide, setShowPermissionGuide] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const mimeTypeRef = useRef<string>('audio/webm');
 
-  // 获取专业评测剩余时间（数据库存储为分钟，显示为秒）
-  const professionalMinutes = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
-  const professionalSeconds = Math.floor(professionalMinutes * 60); // 转换为秒显示
+  // 获取专业评测剩余时间（数据库直接存储秒数）
+  const professionalSeconds = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
 
   const startRecording = async () => {
     if (professionalSeconds <= 0) {
-      toast({
-        variant: 'destructive',
-        title: '专业评测时间不足',
-        description: '请使用授权码充值专业评测时间',
-      });
+      // 弹出授权码输入框
+      setShowAuthCodeDialog(true);
+      return;
+    }
+
+    // 检查是否在安全上下文中（HTTPS 或 localhost）
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isHttps = window.location.protocol === 'https:';
+
+      if (!isLocalhost && !isHttps) {
+        setError(`录音功能需要通过 localhost 或 HTTPS 访问。\n当前地址: ${window.location.host}\n请使用: http://localhost:8080`);
+      } else {
+        setError('当前浏览器不支持录音功能，请使用 Chrome、Firefox 或 Safari');
+      }
       return;
     }
 
     try {
       setError(null);
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        }
+        audio: true
       });
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      // 检查音轨状态
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0 || !audioTracks[0].enabled) {
+        setError('未检测到可用的麦克风');
+        return;
+      }
+
+      // 检测支持的 mimeType
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/mp4';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = ''; // 使用默认
+          }
+        }
+      }
+
+      // 保存实际使用的 mimeType
+      mimeTypeRef.current = mimeType || 'audio/webm';
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -94,38 +126,50 @@ export const ProfessionalAssessment = ({
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
         setAudioBlob(blob);
         stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.start(100);
+      mediaRecorder.start();
       setIsRecording(true);
-    } catch (err) {
-      console.error('Error starting recording:', err);
-      toast({
-        variant: 'destructive',
-        title: '无法启动录音',
-        description: '请确保已授权麦克风权限',
-      });
+    } catch (err: unknown) {
+      // 检查是否是权限问题
+      const errorName = err instanceof Error ? (err as DOMException).name : '';
+      const errorMessage = err instanceof Error ? err.message : String(err);
+
+      if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError') {
+        // 权限被拒绝，显示引导弹窗
+        setShowPermissionGuide(true);
+      } else if (errorName === 'NotFoundError') {
+        // 没有找到麦克风设备
+        setError('未检测到麦克风设备，请确保麦克风已正确连接');
+      } else if (errorName === 'NotReadableError' || errorName === 'AbortError') {
+        // 设备被占用或无法读取
+        setError('麦克风被其他应用占用，请关闭其他使用麦克风的应用后重试');
+      } else {
+        // 其他错误
+        setError(`录音启动失败: ${errorName || '未知错误'} - ${errorMessage}`);
+      }
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      // 先请求剩余的数据，确保不会丢失
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.requestData();
+      }
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   };
 
   const submitForAssessment = async () => {
-    console.log('submitForAssessment called, audioBlob:', audioBlob);
     if (!audioBlob) {
-      console.error('No audioBlob available!');
       return;
     }
 
-    console.log('Starting assessment processing...');
     setIsProcessing(true);
     setError(null);
 
@@ -134,18 +178,13 @@ export const ProfessionalAssessment = ({
       reader.readAsDataURL(audioBlob);
 
       reader.onloadend = async () => {
-        console.log('FileReader onloadend triggered');
         const base64Audio = reader.result as string;
-        console.log('Audio base64 length:', base64Audio.length);
-
-        console.log('Calling professional-assessment Edge Function...');
         const { data, error: funcError } = await supabase.functions.invoke('professional-assessment', {
           body: {
             audio_base64: base64Audio.split(',')[1],
             original_text: originalText,
           },
         });
-        console.log('Edge function response:', data, 'Error:', funcError);
 
         if (funcError) throw funcError;
 
@@ -172,7 +211,7 @@ export const ProfessionalAssessment = ({
           } else {
             toast({
               title: '专业评测完成',
-              description: `总分: ${data.overall_score}分，已扣除${data.seconds_used || Math.round(data.minutes_used * 60)}秒`,
+              description: `总分: ${data.overall_score}分，已扣除${data.seconds_used}秒`,
             });
           }
 
@@ -367,7 +406,7 @@ export const ProfessionalAssessment = ({
             {/* Billing info */}
             {result.billed && (
               <p className="text-xs text-muted-foreground text-center">
-                已扣除 {result.minutes_used} 分钟，剩余 {result.remaining_minutes} 分钟
+                已扣除 {result.seconds_used} 秒，剩余 {result.remaining_seconds} 秒
               </p>
             )}
           </div>
@@ -393,6 +432,18 @@ export const ProfessionalAssessment = ({
           </Button>
         </div>
       </div>
+
+      {/* 授权码充值弹窗 */}
+      <AuthCodeDialog
+        open={showAuthCodeDialog}
+        onOpenChange={setShowAuthCodeDialog}
+      />
+
+      {/* 麦克风权限引导弹窗 */}
+      <MicPermissionGuide
+        open={showPermissionGuide}
+        onOpenChange={setShowPermissionGuide}
+      />
     </div>
   );
 };

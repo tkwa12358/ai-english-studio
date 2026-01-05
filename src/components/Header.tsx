@@ -1,20 +1,28 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { BookOpen, Settings, LogOut, Menu, X, Crown, BarChart3, User } from 'lucide-react';
+import { BookOpen, Settings, LogOut, Menu, X, Crown, BarChart3, User, Ticket } from 'lucide-react';
 import { useState } from 'react';
+import { AuthCodeDialog } from '@/components/AuthCodeDialog';
 
 export const Header = () => {
   const { user, profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // 获取专业评测时间
-  const professionalMinutes = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
+  // 获取专业评测时间（数据库直接存储秒数）
+  const professionalSeconds = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  // 点击视频学习按钮时，清除 lastVideoId 并导航到视频列表
+  const handleVideoLearnClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    localStorage.removeItem('lastVideoId');
+    navigate('/learn');
   };
 
   return (
@@ -33,9 +41,9 @@ export const Header = () => {
         <nav className="hidden md:flex items-center gap-2">
           {user ? (
             <>
-              <Link to="/learn">
-                <Button variant="ghost" className="rounded-xl hover:bg-accent/50">视频学习</Button>
-              </Link>
+              <Button variant="ghost" className="rounded-xl hover:bg-accent/50" onClick={handleVideoLearnClick}>
+                视频学习
+              </Button>
               <Link to="/wordbook">
                 <Button variant="ghost" className="rounded-xl hover:bg-accent/50">
                   <BookOpen className="w-4 h-4 mr-2" />
@@ -51,10 +59,11 @@ export const Header = () => {
               <Link to="/local-learn">
                 <Button variant="ghost" className="rounded-xl hover:bg-accent/50">本地学习</Button>
               </Link>
+              <AuthCodeDialog />
               <Link to="/profile">
                 <div className="flex items-center gap-2 px-3 py-1.5 glass rounded-xl cursor-pointer hover:bg-accent/50 transition-colors">
                   <Crown className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-sm">{professionalMinutes}分钟</span>
+                  <span className="font-medium text-sm">{professionalSeconds}秒</span>
                   <User className="w-3 h-3 text-muted-foreground" />
                 </div>
               </Link>
@@ -97,9 +106,9 @@ export const Header = () => {
           <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
             {user ? (
               <>
-                <Link to="/learn" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start rounded-xl">视频学习</Button>
-                </Link>
+                <Button variant="ghost" className="w-full justify-start rounded-xl" onClick={(e) => { handleVideoLearnClick(e); setMobileMenuOpen(false); }}>
+                  视频学习
+                </Button>
                 <Link to="/wordbook" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start rounded-xl">
                     <BookOpen className="w-4 h-4 mr-2" />
@@ -115,10 +124,20 @@ export const Header = () => {
                 <Link to="/local-learn" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="ghost" className="w-full justify-start rounded-xl">本地学习</Button>
                 </Link>
+                <div onClick={() => setMobileMenuOpen(false)}>
+                  <AuthCodeDialog
+                    trigger={
+                      <Button variant="ghost" className="w-full justify-start rounded-xl">
+                        <Ticket className="w-4 h-4 mr-2" />
+                        授权码充值
+                      </Button>
+                    }
+                  />
+                </div>
                 <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>
                   <div className="flex items-center gap-2 px-3 py-2 glass rounded-xl cursor-pointer hover:bg-accent/50 transition-colors">
                     <Crown className="w-4 h-4 text-primary" />
-                    <span>专业评测: {professionalMinutes}分钟</span>
+                    <span>专业评测: {professionalSeconds}秒</span>
                     <User className="w-3 h-3 text-muted-foreground" />
                   </div>
                 </Link>

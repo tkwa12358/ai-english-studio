@@ -9,7 +9,7 @@ import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/integrations/supabase/client';
 
 const Login = () => {
-  const [phone, setPhone] = useState('');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
@@ -46,15 +46,15 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
 
-    console.log('Attempting login with phone:', phone);
-    const { error } = await signIn(phone, password);
+    console.log('Attempting login with account:', account);
+    const { error } = await signIn(account.trim(), password);
 
     if (error) {
       console.error('Login Error Object:', error);
       toast({
         variant: 'destructive',
         title: '登录失败',
-        description: `${error.message || '请检查手机号和密码'}`,
+        description: `${error.message || '请检查账号和密码'}`,
       });
     } else {
       toast({
@@ -86,13 +86,15 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="phone">手机号</Label>
+              <Label htmlFor="account">手机号 / 邮箱</Label>
               <Input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="请输入手机号"
+                id="account"
+                type="text"
+                inputMode="text"
+                autoComplete="username"
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+                placeholder="请输入手机号或邮箱"
                 className="border-2 border-foreground"
                 required
               />

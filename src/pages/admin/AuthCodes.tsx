@@ -70,17 +70,17 @@ const AdminAuthCodes: React.FC = () => {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + data.expires_days);
       
-      // 根据类型确定分钟数（只有专业评测）
-      let minutesAmount = 0;
-      if (data.code_type === 'pro_10min') minutesAmount = 10;
-      else if (data.code_type === 'pro_30min') minutesAmount = 30;
-      else if (data.code_type === 'pro_60min') minutesAmount = 60;
+      // 根据类型确定秒数（只有专业评测）
+      let secondsAmount = 0;
+      if (data.code_type === 'pro_10min') secondsAmount = 10 * 60;
+      else if (data.code_type === 'pro_30min') secondsAmount = 30 * 60;
+      else if (data.code_type === 'pro_60min') secondsAmount = 60 * 60;
       
       for (let i = 0; i < data.count; i++) {
         codes.push({
           code: generateCode(),
           code_type: data.code_type,
-          minutes_amount: minutesAmount,
+          minutes_amount: secondsAmount, // 字段名保留，实际存储秒数
           expires_at: expiresAt.toISOString(),
         });
       }
@@ -127,9 +127,9 @@ const AdminAuthCodes: React.FC = () => {
 
   const getCodeTypeLabel = (codeType: string) => {
     switch (codeType) {
-      case 'pro_10min': return '专业评测 10分钟';
-      case 'pro_30min': return '专业评测 30分钟';
-      case 'pro_60min': return '专业评测 60分钟';
+      case 'pro_10min': return '专业评测 600秒';
+      case 'pro_30min': return '专业评测 1800秒';
+      case 'pro_60min': return '专业评测 3600秒';
       case 'registration': return '注册';
       // 兼容旧数据
       case '10min': return '(旧)普通 10分钟';
@@ -169,9 +169,9 @@ const AdminAuthCodes: React.FC = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pro_10min">专业评测 10分钟</SelectItem>
-                      <SelectItem value="pro_30min">专业评测 30分钟</SelectItem>
-                      <SelectItem value="pro_60min">专业评测 60分钟</SelectItem>
+                      <SelectItem value="pro_10min">专业评测 600秒 (10分钟)</SelectItem>
+                      <SelectItem value="pro_30min">专业评测 1800秒 (30分钟)</SelectItem>
+                      <SelectItem value="pro_60min">专业评测 3600秒 (60分钟)</SelectItem>
                       <SelectItem value="registration">注册授权码</SelectItem>
                     </SelectContent>
                   </Select>
@@ -221,7 +221,7 @@ const AdminAuthCodes: React.FC = () => {
               <TableRow key={code.id}>
                 <TableCell className="font-mono">{code.code}</TableCell>
                 <TableCell>{getCodeTypeLabel(code.code_type as string)}</TableCell>
-                <TableCell>{code.minutes_amount || '-'} 分钟</TableCell>
+                <TableCell>{code.minutes_amount || '-'} 秒</TableCell>
                 <TableCell>
                   <span
                     className={`px-2 py-1 rounded-full text-xs ${

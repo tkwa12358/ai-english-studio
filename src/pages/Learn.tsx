@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { VideoPlayer, VideoPlayerRef } from '@/components/VideoPlayer';
 import { SubtitleList } from '@/components/SubtitleList';
@@ -17,6 +17,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 const Learn = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -64,6 +65,8 @@ const Learn = () => {
       .from('videos')
       .select('*')
       .eq('is_published', true)
+      .neq('video_url', '')
+      .not('video_url', 'is', null)
       .order('created_at', { ascending: false });
 
     if (!error && data) {
@@ -84,6 +87,22 @@ const Learn = () => {
       }
     }
   }, [videoId, videos, selectedVideo]);
+
+  // 监听导航事件：当用户点击"视频学习"按钮回到列表时重置状态
+  useEffect(() => {
+    // 如果 URL 是 /learn（无 videoId）且 localStorage 没有 lastVideoId，则重置 selectedVideo
+    if (location.pathname === '/learn' && !videoId && selectedVideo) {
+      const lastVideoId = localStorage.getItem('lastVideoId');
+      if (!lastVideoId) {
+        pauseTracking();
+        savePosition(currentTime);
+        setSelectedVideo(null);
+        setSubtitles([]);
+        setSubtitlesCn([]);
+        setCurrentSubtitle(null);
+      }
+    }
+  }, [location.key]); // 监听 location.key 以检测导航事件
 
   // Persist showTranslation preference
   useEffect(() => {

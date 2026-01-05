@@ -2,13 +2,23 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/lib/supabase';
 
+// 生成设备ID
+const getDeviceId = (): string => {
+  let deviceId = localStorage.getItem('deviceId');
+  if (!deviceId) {
+    deviceId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    localStorage.setItem('deviceId', deviceId);
+  }
+  return deviceId;
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (phone: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (phone: string, password: string, authCode?: string) => Promise<{ error: Error | null }>;
+  signIn: (account: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (account: string, password: string, authCode?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   refreshProfile: () => Promise<void>;
@@ -82,43 +92,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (phone: string, password: string) => {
-    const email = `${phone}@aienglish.club`;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
-  };
+  const signIn = async (account: string, password: string) => {
+    // 支持手机号和邮箱登录
+    const isEmail = account.includes('@');
+    const email = isEmail ? account : `${account}@aienglish.club`;
 
-  const signUp = async (phone: string, password: string, authCode?: string) => {
-    // Verify auth code if provided
-    if (authCode) {
-      const { data: codeData, error: codeError } = await supabase
-        .from('auth_codes')
-        .select('*')
-        .eq('code', authCode)
-        .eq('code_type', 'registration')
-        .eq('is_used', false)
-        .single();
-      
-      if (codeError || !codeData) {
-        return { error: new Error('授权码无效或已被使用') };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (!error && data.user) {
+      // 注册设备会话
+      try {
+        await supabase.rpc('check_device_limit', {
+          p_user_id: data.user.id,
+          p_device_id: getDeviceId(),
+          p_max_devices: 2
+        });
+      } catch (e) {
+        console.error('Device session error:', e);
       }
     }
 
-    const email = `${phone}@aienglish.club`;
-    const { data, error } = await supabase.auth.signUp({ 
-      email, 
+    return { error: error as Error | null };
+  };
+
+  const signUp = async (account: string, password: string, authCode?: string) => {
+    // 授权码必须提供
+    if (!authCode) {
+      return { error: new Error('注册需要有效的授权码') };
+    }
+
+    // 验证授权码
+    const { data: codeData, error: codeError } = await supabase
+      .from('auth_codes')
+      .select('*')
+      .eq('code', authCode)
+      .eq('code_type', 'registration')
+      .eq('is_used', false)
+      .single();
+
+    if (codeError || !codeData) {
+      return { error: new Error('授权码无效或已被使用') };
+    }
+
+    // 检查授权码是否过期
+    if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
+      return { error: new Error('授权码已过期') };
+    }
+
+    // 支持手机号和邮箱注册
+    const isEmail = account.includes('@');
+    const email = isEmail ? account : `${account}@aienglish.club`;
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
       password,
       options: {
-        data: { phone }
+        data: { phone: isEmail ? null : account, email: isEmail ? account : null }
       }
     });
 
-    if (!error && data.user && authCode) {
-      // Mark auth code as used
+    if (!error && data.user) {
+      // 标记授权码已使用，绑定到用户
       await supabase
         .from('auth_codes')
-        .update({ is_used: true, used_by: data.user.id, used_at: new Date().toISOString() })
+        .update({
+          is_used: true,
+          used_by: data.user.id,
+          used_at: new Date().toISOString()
+        })
         .eq('code', authCode);
+
+      // 注册设备会话
+      try {
+        await supabase.rpc('check_device_limit', {
+          p_user_id: data.user.id,
+          p_device_id: getDeviceId(),
+          p_max_devices: 2
+        });
+      } catch (e) {
+        console.error('Device session error:', e);
+      }
     }
 
     return { error: error as Error | null };

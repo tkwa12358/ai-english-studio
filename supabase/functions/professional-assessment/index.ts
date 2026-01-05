@@ -519,18 +519,17 @@ serve(async (req) => {
       // 调用专业评测服务
       assessmentResult = await callAssessmentProvider(provider, audio_base64, original_text, language);
 
-      // 评测成功，按秒计费（更公平的计费方式）
+      // 评测成功，按秒计费（数据库直接存储秒数）
       const durationSeconds = Math.ceil((Date.now() - startTime) / 1000) + 5; // 加上估计的音频时长
       const secondsUsed = Math.max(1, durationSeconds); // 最少计费1秒
-      // 将 professional_voice_minutes 当作"秒数"来使用（字段名历史原因保留）
-      const remainingSeconds = remainingMinutes * 60; // 将分钟转换为秒
+      // remainingMinutes 字段名保留，但实际存储的是秒数
+      const remainingSeconds = remainingMinutes;
       const newRemainingSeconds = Math.max(0, remainingSeconds - secondsUsed);
-      const newRemainingMinutes = newRemainingSeconds / 60; // 转回分钟存储
 
-      // 更新用户专业评测时间（存储单位仍为分钟，但按秒扣除）
+      // 更新用户专业评测时间（直接存储秒数）
       const { error: updateError } = await supabaseAdmin
         .from('profiles')
-        .update({ professional_voice_minutes: newRemainingMinutes })
+        .update({ professional_voice_minutes: newRemainingSeconds })
         .eq('user_id', user.id);
 
       if (updateError) {
@@ -566,10 +565,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           ...assessmentResult,
-          remaining_minutes: newRemainingMinutes,
-          remaining_seconds: Math.floor(newRemainingSeconds), // 返回剩余秒数
-          seconds_used: isBilled ? secondsUsed : 0, // 返回消耗的秒数
-          minutes_used: isBilled ? Math.round(secondsUsed / 60 * 100) / 100 : 0, // 保留兼容
+          remaining_seconds: newRemainingSeconds,
+          seconds_used: isBilled ? secondsUsed : 0,
           billed: isBilled,
           billing_error: billingError,
         }),

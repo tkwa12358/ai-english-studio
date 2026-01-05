@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2, ImagePlus, RefreshCw } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, Video, VideoCategory } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -63,9 +63,41 @@ const generateThumbnail = (videoFile: File): Promise<Blob> => {
       }
     };
     video.onerror = (e) => reject(new Error('Video load error'));
-
-    // Create blob URL for the video file
     video.src = URL.createObjectURL(videoFile);
+  });
+};
+
+// 从视频URL生成缩略图
+const generateThumbnailFromUrl = (videoUrl: string): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      video.currentTime = 0.5; // 取0.5秒处的帧
+    };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('缩略图生成失败'));
+          }
+          video.remove();
+        }, 'image/jpeg', 0.8);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    video.onerror = () => reject(new Error('视频加载失败'));
+    video.src = videoUrl;
   });
 };
 
@@ -153,6 +185,7 @@ const AdminVideos: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -415,12 +448,175 @@ const AdminVideos: React.FC = () => {
                           视频链接: {formData.video_url}
                         </p>
                       )}
-                      {formData.thumbnail_url && (
-                        <div className="flex gap-2 items-center mt-2">
-                          <img src={formData.thumbnail_url} className="h-16 w-24 object-cover rounded border" alt="Thumbnail" />
-                          <p className="text-xs text-muted-foreground">已自动生成封面</p>
-                        </div>
-                      )}
+
+                      {/* 缩略图管理区域 */}
+                      <div className="mt-3 p-3 border rounded-lg bg-muted/30">
+                        <Label className="text-sm font-medium mb-2 block">视频封面</Label>
+
+                        {formData.thumbnail_url ? (
+                          <div className="flex gap-3 items-start">
+                            <img src={formData.thumbnail_url} className="h-20 w-32 object-cover rounded border" alt="Thumbnail" />
+                            <div className="flex flex-col gap-2">
+                              <p className="text-xs text-green-600 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                封面已设置
+                              </p>
+                              <div className="flex gap-2">
+                                {/* 重新生成按钮 */}
+                                {formData.video_url && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={uploadingThumbnail}
+                                    onClick={async () => {
+                                      setUploadingThumbnail(true);
+                                      try {
+                                        const thumbBlob = await generateThumbnailFromUrl(formData.video_url);
+                                        const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                        const thumbName = `thumb-${Date.now()}.jpg`;
+
+                                        const { error: thumbError } = await supabase.storage
+                                          .from('thumbnails')
+                                          .upload(thumbName, thumbFile);
+
+                                        if (thumbError) throw thumbError;
+
+                                        const { data: { publicUrl } } = supabase.storage
+                                          .from('thumbnails')
+                                          .getPublicUrl(thumbName);
+
+                                        setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                        toast({ title: '封面已重新生成' });
+                                      } catch (err: any) {
+                                        toast({ title: '生成失败', description: err.message, variant: 'destructive' });
+                                      } finally {
+                                        setUploadingThumbnail(false);
+                                      }
+                                    }}
+                                  >
+                                    {uploadingThumbnail ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                    <span className="ml-1">重新生成</span>
+                                  </Button>
+                                )}
+                                {/* 手动上传按钮 */}
+                                <label>
+                                  <Button type="button" variant="outline" size="sm" disabled={uploadingThumbnail} asChild>
+                                    <span>
+                                      <ImagePlus className="w-3 h-3 mr-1" />
+                                      上传图片
+                                    </span>
+                                  </Button>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      setUploadingThumbnail(true);
+                                      try {
+                                        const thumbName = `thumb-${Date.now()}.jpg`;
+                                        const { error } = await supabase.storage
+                                          .from('thumbnails')
+                                          .upload(thumbName, file);
+                                        if (error) throw error;
+                                        const { data: { publicUrl } } = supabase.storage
+                                          .from('thumbnails')
+                                          .getPublicUrl(thumbName);
+                                        setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                        toast({ title: '封面已上传' });
+                                      } catch (err: any) {
+                                        toast({ title: '上传失败', description: err.message, variant: 'destructive' });
+                                      } finally {
+                                        setUploadingThumbnail(false);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <p className="text-xs text-muted-foreground">暂无封面</p>
+                            <div className="flex gap-2">
+                              {/* 从视频生成按钮 */}
+                              {formData.video_url && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={uploadingThumbnail}
+                                  onClick={async () => {
+                                    setUploadingThumbnail(true);
+                                    try {
+                                      const thumbBlob = await generateThumbnailFromUrl(formData.video_url);
+                                      const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                      const thumbName = `thumb-${Date.now()}.jpg`;
+
+                                      const { error: thumbError } = await supabase.storage
+                                        .from('thumbnails')
+                                        .upload(thumbName, thumbFile);
+
+                                      if (thumbError) throw thumbError;
+
+                                      const { data: { publicUrl } } = supabase.storage
+                                        .from('thumbnails')
+                                        .getPublicUrl(thumbName);
+
+                                      setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                      toast({ title: '封面已生成' });
+                                    } catch (err: any) {
+                                      toast({ title: '生成失败', description: err.message, variant: 'destructive' });
+                                    } finally {
+                                      setUploadingThumbnail(false);
+                                    }
+                                  }}
+                                >
+                                  {uploadingThumbnail ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                  <span className="ml-1">从视频生成</span>
+                                </Button>
+                              )}
+                              {/* 手动上传按钮 */}
+                              <label>
+                                <Button type="button" variant="outline" size="sm" disabled={uploadingThumbnail} asChild>
+                                  <span>
+                                    <ImagePlus className="w-3 h-3 mr-1" />
+                                    上传图片
+                                  </span>
+                                </Button>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setUploadingThumbnail(true);
+                                    try {
+                                      const thumbName = `thumb-${Date.now()}.jpg`;
+                                      const { error } = await supabase.storage
+                                        .from('thumbnails')
+                                        .upload(thumbName, file);
+                                      if (error) throw error;
+                                      const { data: { publicUrl } } = supabase.storage
+                                        .from('thumbnails')
+                                        .getPublicUrl(thumbName);
+                                      setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                      toast({ title: '封面已上传' });
+                                    } catch (err: any) {
+                                      toast({ title: '上传失败', description: err.message, variant: 'destructive' });
+                                    } finally {
+                                      setUploadingThumbnail(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
