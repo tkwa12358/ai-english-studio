@@ -7,17 +7,20 @@ import { ProfessionalAssessment } from '@/components/ProfessionalAssessment';
 import { WordLookup } from '@/components/WordLookup';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { RecentlyLearned } from '@/components/RecentlyLearned';
+import { ActivationDialog } from '@/components/ActivationDialog';
 import { supabase, Video, Subtitle, parseSRT, getStorageUrl } from '@/lib/supabase';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Loader2, ChevronLeft, Clock, CheckCircle2, Languages } from 'lucide-react';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Learn = () => {
   const { videoId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, profile } = useAuth();
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -27,6 +30,10 @@ const Learn = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [loading, setLoading] = useState(true);
   const playerRef = useRef<VideoPlayerRef>(null);
+
+  // 激活状态检查
+  const [isActivated, setIsActivated] = useState<boolean | null>(null);
+  const [showActivationDialog, setShowActivationDialog] = useState(false);
 
   // Initialize showTranslation from localStorage or default to true
   const [showTranslation, setShowTranslation] = useState(() => {
@@ -53,6 +60,51 @@ const Learn = () => {
     fetchVideos();
   }, []);
 
+  // 用户变化时重置状态（切换账号）
+  useEffect(() => {
+    setSelectedVideo(null);
+    setSubtitles([]);
+    setSubtitlesCn([]);
+    setCurrentSubtitle(null);
+  }, [user?.id]);
+
+  // 检查用户是否已激活（通过查询 auth_codes 表）
+  useEffect(() => {
+    const checkActivation = async () => {
+      if (!user) {
+        setIsActivated(null);
+        return;
+      }
+
+      // 检查是否使用过 registration 授权码
+      const { data } = await supabase
+        .from('auth_codes')
+        .select('id')
+        .eq('used_by', user.id)
+        .eq('code_type', 'registration')
+        .eq('is_used', true)
+        .limit(1);
+
+      setIsActivated(data && data.length > 0);
+    };
+    checkActivation();
+  }, [user]);
+
+  // 检查是否可以访问视频
+  const canAccessVideo = useCallback(() => {
+    if (!profile) return false;
+    if (profile.role === 'admin') return true;
+    if (isActivated) return true;
+
+    // 检查试用期（30天）
+    const TRIAL_DAYS = 30;
+    const registerDate = new Date(profile.created_at);
+    const daysSinceRegister = Math.floor(
+      (Date.now() - registerDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return daysSinceRegister < TRIAL_DAYS;
+  }, [profile, isActivated]);
+
   useEffect(() => {
     if (videoId && videos.length > 0) {
       const video = videos.find(v => v.id === videoId);
@@ -76,8 +128,9 @@ const Learn = () => {
   };
 
   // Effect to load last played video if no videoId in params
+  // 只有当用户已登录且稳定后才尝试加载
   useEffect(() => {
-    if (!videoId && videos.length > 0 && !selectedVideo) {
+    if (user && !videoId && videos.length > 0 && !selectedVideo) {
       const lastVideoId = localStorage.getItem('lastVideoId');
       if (lastVideoId) {
         const lastVideo = videos.find(v => v.id === lastVideoId);
@@ -86,7 +139,7 @@ const Learn = () => {
         }
       }
     }
-  }, [videoId, videos, selectedVideo]);
+  }, [videoId, videos, selectedVideo, user]);
 
   // 监听导航事件：当用户点击"视频学习"按钮回到列表时重置状态
   useEffect(() => {
@@ -110,6 +163,12 @@ const Learn = () => {
   }, [showTranslation]);
 
   const selectVideo = (video: Video) => {
+    // 检查是否可以访问视频
+    if (!canAccessVideo()) {
+      setShowActivationDialog(true);
+      return;
+    }
+
     setSelectedVideo(video);
     // Persist last played video
     localStorage.setItem('lastVideoId', video.id);
@@ -385,6 +444,16 @@ const Learn = () => {
           </ErrorBoundary>
         )
       }
+
+      {/* 激活提示弹窗 */}
+      <ActivationDialog
+        open={showActivationDialog}
+        onOpenChange={setShowActivationDialog}
+        onActivated={() => {
+          setIsActivated(true);
+          setShowActivationDialog(false);
+        }}
+      />
     </>
   );
 };

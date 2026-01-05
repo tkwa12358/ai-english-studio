@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Pencil, Crown, Key } from 'lucide-react';
+import { Pencil, Crown, Key, Users, Activity } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
@@ -66,6 +66,31 @@ const AdminUsers: React.FC = () => {
         .select('*')
         .order('created_at', { ascending: false });
       return data as ExtendedProfile[];
+    },
+  });
+
+  // 查询用户统计数据
+  const { data: statsData } = useQuery({
+    queryKey: ['admin-user-stats'],
+    queryFn: async () => {
+      // 查询总用户数
+      const { count: totalUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      // 查询今日活跃用户（今日有学习记录的用户去重）
+      const today = new Date().toISOString().split('T')[0];
+      const { data: activeData } = await supabase
+        .from('learning_progress')
+        .select('user_id')
+        .gte('updated_at', today);
+
+      const todayActive = activeData ? new Set(activeData.map(d => d.user_id)).size : 0;
+
+      return {
+        totalUsers: totalUsers || 0,
+        todayActive
+      };
     },
   });
 
@@ -142,7 +167,27 @@ const AdminUsers: React.FC = () => {
       </Helmet>
 
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">用户管理</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">用户管理</h1>
+        </div>
+
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-card border rounded-lg p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <Users className="h-4 w-4" />
+              <span className="text-sm">总注册人数</span>
+            </div>
+            <p className="text-2xl font-bold">{statsData?.totalUsers || 0}</p>
+          </div>
+          <div className="bg-card border rounded-lg p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <Activity className="h-4 w-4" />
+              <span className="text-sm">今日活跃</span>
+            </div>
+            <p className="text-2xl font-bold">{statsData?.todayActive || 0}</p>
+          </div>
+        </div>
 
         <Table>
           <TableHeader>

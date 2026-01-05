@@ -37,7 +37,6 @@ const Register = () => {
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [authCode, setAuthCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const { signUp } = useAuth();
@@ -102,20 +101,12 @@ const Register = () => {
       return;
     }
 
-    // 授权码必填检查
-    if (!authCode.trim()) {
-      toast({
-        variant: 'destructive',
-        title: '请输入授权码',
-        description: '注册需要有效的授权码',
-      });
-      return;
-    }
+    // 授权码改为可选（30天后才需要）
 
     setLoading(true);
     localStorage.setItem(REGISTER_STORAGE_KEY, Date.now().toString());
 
-    const { error } = await signUp(account.trim(), password, authCode.trim());
+    const { error } = await signUp(account.trim(), password);
 
     if (error) {
       toast({
@@ -191,22 +182,6 @@ const Register = () => {
                 className="border-2 border-foreground"
                 required
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="authCode">授权码</Label>
-              <Input
-                id="authCode"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value)}
-                placeholder="请输入授权码"
-                className="border-2 border-foreground"
-                required
-              />
-              <p className="text-xs text-muted-foreground">注册需要有效的授权码，请联系管理员获取</p>
             </div>
 
             <Button

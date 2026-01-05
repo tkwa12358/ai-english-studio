@@ -86,8 +86,12 @@ export const AuthCodeDialog = ({ trigger, open, onOpenChange }: AuthCodeDialogPr
       // 检查授权码类型，计算秒数
       const codeType = codeData.code_type;
       let secondsToAdd = 0;
+      let isRegistrationCode = false;
 
-      if (codeType === 'pro_10min') {
+      if (codeType === 'registration') {
+        // registration 类型：仅用于激活账号，不增加评测时间
+        isRegistrationCode = true;
+      } else if (codeType === 'pro_10min') {
         secondsToAdd = 10 * 60; // 600秒
       } else if (codeType === 'pro_30min') {
         secondsToAdd = 30 * 60; // 1800秒
@@ -105,16 +109,18 @@ export const AuthCodeDialog = ({ trigger, open, onOpenChange }: AuthCodeDialogPr
         return;
       }
 
-      // 更新用户的专业评测时间（直接存储秒数）
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          professional_voice_minutes: professionalSeconds + secondsToAdd,
-        })
-        .eq('user_id', user.id);
+      // 如果是评测时间授权码，更新用户的专业评测时间
+      if (!isRegistrationCode && secondsToAdd > 0) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            professional_voice_minutes: professionalSeconds + secondsToAdd,
+          })
+          .eq('user_id', user.id);
 
-      if (updateError) {
-        throw updateError;
+        if (updateError) {
+          throw updateError;
+        }
       }
 
       // 标记授权码已使用
@@ -130,10 +136,17 @@ export const AuthCodeDialog = ({ trigger, open, onOpenChange }: AuthCodeDialogPr
       // 刷新用户信息
       await refreshProfile();
 
-      toast({
-        title: '充值成功',
-        description: `已添加 ${secondsToAdd} 秒专业评测时间`,
-      });
+      if (isRegistrationCode) {
+        toast({
+          title: '激活成功',
+          description: '您的账号已激活，可以继续使用所有功能',
+        });
+      } else {
+        toast({
+          title: '充值成功',
+          description: `已添加 ${secondsToAdd} 秒专业评测时间`,
+        });
+      }
 
       setCode('');
       setIsOpen(false);

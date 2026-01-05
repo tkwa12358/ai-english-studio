@@ -18,7 +18,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (account: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (account: string, password: string, authCode?: string) => Promise<{ error: Error | null }>;
+  signUp: (account: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   refreshProfile: () => Promise<void>;
@@ -115,29 +115,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: error as Error | null };
   };
 
-  const signUp = async (account: string, password: string, authCode?: string) => {
-    // 授权码必须提供
-    if (!authCode) {
-      return { error: new Error('注册需要有效的授权码') };
-    }
-
-    // 验证授权码
-    const { data: codeData, error: codeError } = await supabase
-      .from('auth_codes')
-      .select('*')
-      .eq('code', authCode)
-      .eq('code_type', 'registration')
-      .eq('is_used', false)
-      .single();
-
-    if (codeError || !codeData) {
-      return { error: new Error('授权码无效或已被使用') };
-    }
-
-    // 检查授权码是否过期
-    if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
-      return { error: new Error('授权码已过期') };
-    }
+  const signUp = async (account: string, password: string) => {
+    // 注册不再需要授权码，30天后需要激活
 
     // 支持手机号和邮箱注册
     const isEmail = account.includes('@');
@@ -152,16 +131,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!error && data.user) {
-      // 标记授权码已使用，绑定到用户
-      await supabase
-        .from('auth_codes')
-        .update({
-          is_used: true,
-          used_by: data.user.id,
-          used_at: new Date().toISOString()
-        })
-        .eq('code', authCode);
-
       // 注册设备会话
       try {
         await supabase.rpc('check_device_limit', {
@@ -178,6 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // 清除用户相关的本地存储
+    localStorage.removeItem('lastVideoId');
     await supabase.auth.signOut();
     setProfile(null);
     setIsAdmin(false);
