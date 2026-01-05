@@ -532,12 +532,27 @@ API_EXTERNAL_URL=http://<服务器IP>:8000
 SITE_URL=http://<服务器IP>:3000
 ```
 
-### 3.8 创建数据目录
+**同步密码到数据库初始化脚本（关键！）**：
 
 ```bash
+# 使用你在 .env 中设置的 POSTGRES_PASSWORD
+sed -i "s|your-super-secret-password|<你的数据库密码>|g" docker/db/init/01_schema.sql
+```
+
+### 3.8 创建数据目录并修复权限
+
+```bash
+# 创建数据目录
 mkdir -p volumes/db/data
 mkdir -p volumes/storage
 chmod -R 755 volumes
+
+# 修复配置文件权限（关键！解决 Permission denied 问题）
+chmod 644 docker/db/init/*.sql
+chmod 644 docker/kong/*.yml
+chmod 644 docker/frontend/Dockerfile
+chmod 644 docker/frontend/nginx.conf
+find supabase/functions -name "*.ts" -exec chmod 644 {} \;
 ```
 
 ### 3.9 构建并启动服务
