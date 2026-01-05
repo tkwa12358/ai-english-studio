@@ -84,6 +84,21 @@ export const WordLookup = ({ word, context, contextTranslation, onClose }: WordL
 
       if (error) throw error;
 
+      // 更新用户统计 - 新增生词
+      try {
+        await supabase.rpc('update_user_statistics', {
+          p_user_id: user.id,
+          p_watch_time: 0,
+          p_practice_time: 0,
+          p_sentences_completed: 0,
+          p_words_learned: 1,
+          p_videos_watched: 0,
+          p_assessments: 0,
+        });
+      } catch (statsError) {
+        console.error('Failed to update word statistics:', statsError);
+      }
+
       toast({
         title: '已添加到单词本',
         description: `${wordInfo.word} ${wordInfo.phonetic ? `[${wordInfo.phonetic}]` : ''}`,

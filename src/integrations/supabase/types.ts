@@ -286,6 +286,96 @@ export type Database = {
         }
         Relationships: []
       }
+      user_statistics: {
+        Row: {
+          id: string
+          user_id: string
+          total_watch_time: number
+          total_practice_time: number
+          today_watch_time: number
+          today_practice_time: number
+          total_videos_watched: number
+          total_sentences_completed: number
+          total_words_learned: number
+          total_assessments: number
+          current_streak: number
+          longest_streak: number
+          last_study_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          total_watch_time?: number
+          total_practice_time?: number
+          today_watch_time?: number
+          today_practice_time?: number
+          total_videos_watched?: number
+          total_sentences_completed?: number
+          total_words_learned?: number
+          total_assessments?: number
+          current_streak?: number
+          longest_streak?: number
+          last_study_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          total_watch_time?: number
+          total_practice_time?: number
+          today_watch_time?: number
+          today_practice_time?: number
+          total_videos_watched?: number
+          total_sentences_completed?: number
+          total_words_learned?: number
+          total_assessments?: number
+          current_streak?: number
+          longest_streak?: number
+          last_study_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      daily_statistics: {
+        Row: {
+          id: string
+          user_id: string
+          study_date: string
+          watch_time: number
+          practice_time: number
+          sentences_completed: number
+          words_learned: number
+          videos_watched: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          study_date: string
+          watch_time?: number
+          practice_time?: number
+          sentences_completed?: number
+          words_learned?: number
+          videos_watched?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          study_date?: string
+          watch_time?: number
+          practice_time?: number
+          sentences_completed?: number
+          words_learned?: number
+          videos_watched?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
       video_categories: {
         Row: {
           created_at: string
@@ -567,6 +657,18 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      update_user_statistics: {
+        Args: {
+          p_user_id: string
+          p_watch_time?: number
+          p_practice_time?: number
+          p_sentences_completed?: number
+          p_words_learned?: number
+          p_videos_watched?: number
+          p_assessments?: number
+        }
+        Returns: void
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

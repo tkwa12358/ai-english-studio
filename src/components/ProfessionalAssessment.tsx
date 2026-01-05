@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -47,7 +47,7 @@ export const ProfessionalAssessment = ({
   videoId,
   onSuccess
 }: ProfessionalAssessmentProps) => {
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -59,6 +59,36 @@ export const ProfessionalAssessment = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>('audio/webm');
+  const practiceStartTimeRef = useRef<number>(Date.now());
+
+  // 记录跟读练习时长到用户统计
+  const recordPracticeTime = async () => {
+    if (!user) return;
+
+    const practiceSeconds = Math.floor((Date.now() - practiceStartTimeRef.current) / 1000);
+    if (practiceSeconds <= 0) return;
+
+    try {
+      await supabase.rpc('update_user_statistics', {
+        p_user_id: user.id,
+        p_watch_time: 0,
+        p_practice_time: practiceSeconds,
+        p_sentences_completed: 0,
+        p_words_learned: 0,
+        p_videos_watched: 0,
+        p_assessments: 1,
+      });
+    } catch (error) {
+      console.error('Failed to record practice time:', error);
+    }
+  };
+
+  // 组件关闭时记录练习时长
+  useEffect(() => {
+    return () => {
+      // 组件卸载时不自动记录，只在成功评测时记录
+    };
+  }, []);
 
   // 获取专业评测剩余时间（数据库直接存储秒数）
   const professionalSeconds = (profile as { professional_voice_minutes?: number })?.professional_voice_minutes || 0;
@@ -201,6 +231,9 @@ export const ProfessionalAssessment = ({
           // 评测成功
           setResult(data);
           await refreshProfile();
+
+          // 记录跟读练习时长
+          await recordPracticeTime();
 
           if (data.billing_error) {
             toast({

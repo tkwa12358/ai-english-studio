@@ -31,6 +31,8 @@ interface VideoPlayerProps {
   onSubtitleClick: (subtitle: Subtitle) => void;
   showTranslation?: boolean;
   onToggleTranslation?: () => void;
+  onPlay?: () => void;
+  onPause?: () => void;
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
@@ -41,7 +43,9 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   onTimeUpdate,
   onSubtitleClick,
   showTranslation = true,
-  onToggleTranslation
+  onToggleTranslation,
+  onPlay,
+  onPause
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -183,20 +187,31 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       // Restore playback rate if changed externally or on load
       video.playbackRate = playbackRate;
 
-      video.addEventListener('loadedmetadata', () => setDuration(video.duration));
+      const handleLoadedMetadata = () => setDuration(video.duration);
+      const handlePlay = () => {
+        console.log('[VideoPlayer] play event fired');
+        setIsPlaying(true);
+        onPlay?.();
+      };
+      const handlePause = () => {
+        console.log('[VideoPlayer] pause event fired');
+        setIsPlaying(false);
+        onPause?.();
+      };
+
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
       video.addEventListener('timeupdate', handleTimeUpdate);
-      video.addEventListener('play', () => setIsPlaying(true));
-      video.addEventListener('pause', () => setIsPlaying(false));
-    }
-    return () => {
-      if (video) {
-        video.removeEventListener('loadedmetadata', () => { });
+      video.addEventListener('play', handlePlay);
+      video.addEventListener('pause', handlePause);
+
+      return () => {
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
         video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('play', () => { });
-        video.removeEventListener('pause', () => { });
-      }
-    };
-  }, [handleTimeUpdate, playbackRate]);
+        video.removeEventListener('play', handlePlay);
+        video.removeEventListener('pause', handlePause);
+      };
+    }
+  }, [handleTimeUpdate, playbackRate, onPlay, onPause]);
 
   return (
     <div className="w-full h-full flex flex-col">

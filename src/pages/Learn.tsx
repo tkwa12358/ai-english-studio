@@ -169,6 +169,12 @@ const Learn = () => {
       return;
     }
 
+    // 保存当前视频的进度（如果有）
+    if (selectedVideo) {
+      pauseTracking();
+      savePosition(currentTime);
+    }
+
     setSelectedVideo(video);
     // Persist last played video
     localStorage.setItem('lastVideoId', video.id);
@@ -371,6 +377,11 @@ const Learn = () => {
                       onSubtitleClick={handleSubtitleClick}
                       showTranslation={showTranslation}
                       onToggleTranslation={() => setShowTranslation(!showTranslation)}
+                      onPlay={startTracking}
+                      onPause={() => {
+                        pauseTracking();
+                        savePosition(currentTime);
+                      }}
                     />
                   </div>
 
@@ -430,6 +441,11 @@ const Learn = () => {
                     onSubtitleClick={handleSubtitleClick}
                     showTranslation={showTranslation}
                     onToggleTranslation={() => setShowTranslation(!showTranslation)}
+                    onPlay={startTracking}
+                    onPause={() => {
+                      pauseTracking();
+                      savePosition(currentTime);
+                    }}
                   />
                 </div>
 
