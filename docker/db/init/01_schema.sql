@@ -6,22 +6,97 @@
 -- =====================================================
 
 -- =====================================================
--- Part 1: Extensions Setup
+-- Part 1: Create Required Roles
 -- =====================================================
--- Note: Supabase postgres image already creates all required roles
--- (authenticator, anon, authenticated, service_role, supabase_admin, etc.)
--- with passwords based on POSTGRES_PASSWORD environment variable.
--- We only need to enable extensions and create application tables.
+-- These roles must be created before extensions and tables
+-- Password uses the same default as docker-compose.yml POSTGRES_PASSWORD
+
+-- Create supabase_admin role first (needed for extensions)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_admin') THEN
+    CREATE ROLE supabase_admin LOGIN SUPERUSER PASSWORD 'your-super-secret-password';
+  END IF;
+END
+$$;
+
+-- Create authenticator role (used by PostgREST)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticator') THEN
+    CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD 'your-super-secret-password';
+  END IF;
+END
+$$;
+
+-- Create anon role
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN NOINHERIT;
+  END IF;
+END
+$$;
+
+-- Create authenticated role
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN NOINHERIT;
+  END IF;
+END
+$$;
+
+-- Create service_role
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+  END IF;
+END
+$$;
+
+-- Create supabase_auth_admin role (used by GoTrue auth service)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+    CREATE ROLE supabase_auth_admin NOINHERIT LOGIN PASSWORD 'your-super-secret-password';
+  END IF;
+END
+$$;
+
+-- Create supabase_storage_admin role (used by Storage service)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_storage_admin') THEN
+    CREATE ROLE supabase_storage_admin NOINHERIT LOGIN PASSWORD 'your-super-secret-password';
+  END IF;
+END
+$$;
+
+-- Grant role memberships
+GRANT anon TO authenticator;
+GRANT authenticated TO authenticator;
+GRANT service_role TO authenticator;
+GRANT supabase_admin TO authenticator;
+GRANT ALL ON SCHEMA public TO supabase_admin;
+GRANT ALL ON SCHEMA public TO supabase_auth_admin;
+GRANT ALL ON SCHEMA public TO supabase_storage_admin;
+
+-- =====================================================
+-- Part 2: Enable Extensions
+-- =====================================================
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =====================================================
--- Part 2: Create auth schema (minimal for self-hosted)
+-- Part 3: Create auth schema (minimal for self-hosted)
 -- =====================================================
 
 CREATE SCHEMA IF NOT EXISTS auth;
+GRANT ALL ON SCHEMA auth TO supabase_auth_admin;
 
 -- Users table (simplified for self-hosted)
 CREATE TABLE IF NOT EXISTS auth.users (

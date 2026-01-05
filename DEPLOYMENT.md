@@ -227,6 +227,9 @@ configure_env() {
     sed -i "s|^ENABLE_EMAIL_AUTOCONFIRM=.*|ENABLE_EMAIL_AUTOCONFIRM=true|" .env
     sed -i "s|^ENABLE_PHONE_AUTOCONFIRM=.*|ENABLE_PHONE_AUTOCONFIRM=true|" .env
 
+    # 同步密码到数据库初始化脚本（关键！）
+    sed -i "s|your-super-secret-password|$POSTGRES_PASSWORD|g" docker/db/init/01_schema.sql
+
     success "环境变量配置完成"
     info "服务器 IP: $SERVER_IP"
 }
