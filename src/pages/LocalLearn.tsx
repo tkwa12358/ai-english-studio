@@ -288,9 +288,11 @@ const LocalLearn: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <div className="glass rounded-2xl overflow-hidden">
+            {/* 移动端布局：视频固定 + 悬浮字幕 + 字幕列表 */}
+            <div className="lg:hidden flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
+              {/* 视频区域 - sticky 固定在顶部 */}
+              <div className="sticky top-0 z-30 bg-background shrink-0">
+                <div className="glass rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
                   <VideoPlayer
                     ref={playerRef}
                     videoUrl={videoUrl}
@@ -303,21 +305,92 @@ const LocalLearn: React.FC = () => {
                     onToggleTranslation={() => setShowTranslation(!showTranslation)}
                   />
                 </div>
+
+                {/* 当前字幕悬浮条 */}
+                {currentSubtitle && (
+                  <div className="bg-black/80 backdrop-blur text-white p-3 text-center">
+                    <p className="text-sm font-medium">{currentSubtitle.text}</p>
+                    {showTranslation && subtitlesCn.find(s => Math.abs(s.start - currentSubtitle.start) < 0.5)?.text && (
+                      <p className="text-xs text-gray-300 mt-1">
+                        {subtitlesCn.find(s => Math.abs(s.start - currentSubtitle.start) < 0.5)?.text}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="lg:col-span-1 glass rounded-2xl h-[500px] overflow-hidden">
-                <SubtitleList
+
+              {/* 字幕列表 - 可独立滚动 */}
+              <div className="flex-1 overflow-hidden mt-3">
+                <div className="h-full glass rounded-2xl overflow-hidden shadow-xl flex flex-col ring-1 ring-white/10">
+                  <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-sm shrink-0">
+                    <span className="text-sm font-semibold flex items-center gap-2">
+                      <Languages className="w-4 h-4 text-primary" />
+                      字幕列表
+                    </span>
+                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                      {subtitlesEn.length} 条
+                    </span>
+                  </div>
+                  <SubtitleList
+                    subtitles={subtitlesEn}
+                    subtitlesCn={subtitlesCn}
+                    currentSubtitle={currentSubtitle}
+                    onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
+                    onPractice={(subtitle) => {
+                      const index = subtitlesEn.findIndex(s => s === subtitle);
+                      handlePractice(subtitle, index);
+                    }}
+                    onAddWord={handleWordClick}
+                    showTranslation={showTranslation}
+                    completedSentences={completedSentences}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 桌面端布局：左右分栏 */}
+            <div className="hidden lg:flex flex-row gap-6 lg:items-stretch">
+              {/* 左侧视频区域 */}
+              <div className="w-full lg:w-2/3 glass rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 flex flex-col relative z-20">
+                <VideoPlayer
+                  ref={playerRef}
+                  videoUrl={videoUrl}
                   subtitles={subtitlesEn}
                   subtitlesCn={subtitlesCn}
                   currentSubtitle={currentSubtitle}
+                  onTimeUpdate={handleTimeUpdate}
                   onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
-                  onPractice={(subtitle) => {
-                    const index = subtitlesEn.findIndex(s => s === subtitle);
-                    handlePractice(subtitle, index);
-                  }}
-                  onAddWord={handleWordClick}
                   showTranslation={showTranslation}
-                  completedSentences={completedSentences}
+                  onToggleTranslation={() => setShowTranslation(!showTranslation)}
                 />
+              </div>
+
+              {/* 右侧字幕列表 - 高度跟随视频 */}
+              <div className="w-full lg:w-1/3 relative z-10">
+                <div className="h-[500px] lg:h-full lg:absolute lg:inset-0 glass rounded-2xl overflow-hidden shadow-xl flex flex-col ring-1 ring-white/10">
+                  <div className="p-3 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-sm">
+                    <span className="text-sm font-semibold flex items-center gap-2">
+                      <Languages className="w-4 h-4 text-primary" />
+                      字幕列表
+                    </span>
+                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                      {subtitlesEn.length} 条
+                    </span>
+                  </div>
+                  <SubtitleList
+                    subtitles={subtitlesEn}
+                    subtitlesCn={subtitlesCn}
+                    currentSubtitle={currentSubtitle}
+                    onSubtitleClick={(subtitle) => handleSeek(subtitle.start)}
+                    onPractice={(subtitle) => {
+                      const index = subtitlesEn.findIndex(s => s === subtitle);
+                      handlePractice(subtitle, index);
+                    }}
+                    onAddWord={handleWordClick}
+                    showTranslation={showTranslation}
+                    completedSentences={completedSentences}
+                  />
+                </div>
               </div>
             </div>
           </main>

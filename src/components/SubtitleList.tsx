@@ -30,7 +30,14 @@ export const SubtitleList = ({
 
   useEffect(() => {
     if (activeRef.current) {
-      activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // 使用容器内滚动，而非页面滚动（修复移动端问题）
+      const container = activeRef.current.closest('[data-radix-scroll-area-viewport]');
+      if (container) {
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = activeRef.current.getBoundingClientRect();
+        const scrollTop = elementRect.top - containerRect.top + container.scrollTop - containerRect.height / 2 + elementRect.height / 2;
+        container.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
+      }
     }
   }, [currentSubtitle]);
 
