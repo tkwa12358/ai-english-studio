@@ -223,6 +223,10 @@ configure_env() {
     sed -i "s|^API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://$SERVER_IP:8000|" .env
     sed -i "s|^SITE_URL=.*|SITE_URL=http://$SERVER_IP:3000|" .env
 
+    # 确保自动确认配置正确（关键！用户注册后无需邮箱确认即可登录）
+    sed -i "s|^ENABLE_EMAIL_AUTOCONFIRM=.*|ENABLE_EMAIL_AUTOCONFIRM=true|" .env
+    sed -i "s|^ENABLE_PHONE_AUTOCONFIRM=.*|ENABLE_PHONE_AUTOCONFIRM=true|" .env
+
     # 同步密码到数据库初始化脚本
     sed -i "s|your-super-secret-password|$POSTGRES_PASSWORD|g" docker/db/init/01_schema.sql 2>/dev/null || true
 
