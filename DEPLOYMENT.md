@@ -251,6 +251,14 @@ create_directories() {
     chmod 755 docker/kong
     chmod 644 docker/kong/*.yml 2>/dev/null || true
 
+    # 修复 Dockerfile 和 nginx 配置权限
+    chmod 755 docker/frontend
+    chmod 644 docker/frontend/Dockerfile 2>/dev/null || true
+    chmod 644 docker/frontend/nginx.conf 2>/dev/null || true
+
+    # 修复 Edge Functions 权限
+    find supabase/functions -type f -name "*.ts" -exec chmod 644 {} \; 2>/dev/null || true
+
     success "数据目录创建完成"
 }
 
