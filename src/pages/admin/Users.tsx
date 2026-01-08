@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Pencil, Crown, Key, Users, Activity } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { usersApi, adminApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { format } from 'date-fns';
@@ -61,11 +61,9 @@ const AdminUsers: React.FC = () => {
   const { data: users = [] } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-      return data as ExtendedProfile[];
+      // 获取用户列表，暂定 limit=1000
+      const response = await usersApi.getUsers(1, 1000);
+      return response.users as ExtendedProfile[];
     },
   });
 
@@ -73,31 +71,22 @@ const AdminUsers: React.FC = () => {
   const { data: statsData } = useQuery({
     queryKey: ['admin-user-stats'],
     queryFn: async () => {
-      // 查询总用户数
-      const { count: totalUsers } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-
-      // 查询今日活跃用户（今日有学习记录的用户去重）
-      const today = new Date().toISOString().split('T')[0];
-      const { data: activeData } = await supabase
-        .from('learning_progress')
-        .select('user_id')
-        .gte('updated_at', today);
-
-      const todayActive = activeData ? new Set(activeData.map(d => d.user_id)).size : 0;
-
+      const data = await adminApi.getDashboard();
       return {
-        totalUsers: totalUsers || 0,
-        todayActive
+        totalUsers: data.totalUsers || 0,
+        todayActive: data.todayActiveUsers || 0
       };
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-      const { error } = await supabase.from('profiles').update(data).eq('id', id);
-      if (error) throw error;
+      // 映射 snake_case 到 camelCase
+      await usersApi.updateUser(id, {
+        displayName: data.display_name,
+        role: data.role,
+        professionalVoiceMinutes: data.professional_voice_minutes
+      } as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -111,11 +100,7 @@ const AdminUsers: React.FC = () => {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.functions.invoke('admin-action', {
-        body: { action: 'reset_password', userId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const data = await adminApi.resetUserPassword(userId, 'SpeakAI@123');
       return data;
     },
     onSuccess: () => {
@@ -208,8 +193,8 @@ const AdminUsers: React.FC = () => {
                 <TableCell>
                   <span
                     className={`px-2 py-1 rounded-full text-xs ${user.role === 'admin'
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted text-muted-foreground'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
                       }`}
                   >
                     {user.role === 'admin' ? '管理员' : '用户'}

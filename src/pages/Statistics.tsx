@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
+import { wordsApi } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserStatistics } from '@/hooks/useUserStatistics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,16 +37,17 @@ const Statistics = () => {
   const fetchWordStats = async () => {
     if (!user) return;
 
-    const { data } = await supabase
-      .from('word_book')
-      .select('mastery_level')
-      .eq('user_id', user.id);
+    try {
+      const data = await wordsApi.getWords();
 
-    if (data) {
-      setWordStats({
-        total: data.length,
-        mastered: data.filter(w => w.mastery_level >= 3).length,
-      });
+      if (data) {
+        setWordStats({
+          total: data.length,
+          mastered: data.filter(w => w.mastery_level >= 3).length,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch word stats:', error);
     }
   };
 

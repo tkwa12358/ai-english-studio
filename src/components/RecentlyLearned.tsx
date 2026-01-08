@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, Video, getStorageUrl } from '@/lib/supabase';
+import { learningApi, Video, getStorageUrl } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Play, Clock, Upload } from 'lucide-react';
 
@@ -34,46 +34,34 @@ export const RecentlyLearned: React.FC<RecentlyLearnedProps> = ({
         if (!user) return;
 
         try {
-            // 获取学习进度记录
-            const { data: progressData, error: progressError } = await supabase
-                .from('learning_progress')
-                .select('video_id, last_position, total_practice_time, updated_at')
-                .eq('user_id', user.id)
-                .order('updated_at', { ascending: false })
-                .limit(1);
+            // 使用 learningApi 获取最近学习记录（包含视频信息）
+            const recentData = await learningApi.getRecentVideos(1);
 
-            if (progressError) throw progressError;
+            if (recentData && recentData.length > 0) {
+                const enrichedRecords = recentData.map((record: any) => {
+                    const video = record.video || {
+                        id: record.video_id,
+                        title: record.video_title || '未知视频',
+                        thumbnail_url: record.thumbnail_url,
+                        duration: record.duration || 0
+                    };
 
-            if (progressData && progressData.length > 0) {
-                // 获取关联的视频信息
-                const videoIds = progressData.map((p) => p.video_id);
-                const { data: videosData, error: videosError } = await supabase
-                    .from('videos')
-                    .select('*')
-                    .in('id', videoIds);
+                    // 计算进度百分比
+                    const duration = video.duration || 0;
+                    const progress_percent =
+                        duration > 0
+                            ? Math.min(100, Math.round((record.last_position / duration) * 100))
+                            : 0;
 
-                if (videosError) throw videosError;
-
-                // 合并数据
-                const enrichedRecords = progressData
-                    .map((record) => {
-                        const video = videosData?.find((v) => v.id === record.video_id);
-                        if (!video) return null;
-
-                        // 计算进度百分比
-                        const duration = video.duration || 0;
-                        const progress_percent =
-                            duration > 0
-                                ? Math.min(100, Math.round((record.last_position / duration) * 100))
-                                : 0;
-
-                        return {
-                            ...record,
-                            video: video as Video,
-                            progress_percent,
-                        };
-                    })
-                    .filter(Boolean) as LearningRecord[];
+                    return {
+                        video_id: record.video_id,
+                        video: video as Video,
+                        last_position: record.last_position || 0,
+                        total_practice_time: record.total_practice_time || 0,
+                        updated_at: record.updated_at || new Date().toISOString(),
+                        progress_percent,
+                    };
+                });
 
                 setRecords(enrichedRecords);
             }

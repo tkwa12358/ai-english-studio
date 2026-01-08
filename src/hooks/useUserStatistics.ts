@@ -1,10 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { learningApi, UserStatistics, DailyStatistics } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export interface UserStatistics {
-  id: string;
-  user_id: string;
+// 导出类型供外部使用
+export type { UserStatistics, DailyStatistics };
+
+// 内部转换的统计类型（与数据库字段名兼容）
+interface InternalStatistics {
+  id?: string;
+  user_id?: string;
   total_watch_time: number;
   total_practice_time: number;
   today_watch_time: number;
@@ -16,11 +20,11 @@ export interface UserStatistics {
   current_streak: number;
   longest_streak: number;
   last_study_date: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface DailyStatistics {
+interface InternalDailyStatistics {
   id: string;
   user_id: string;
   study_date: string;
@@ -29,14 +33,29 @@ export interface DailyStatistics {
   sentences_completed: number;
   words_learned: number;
   videos_watched: number;
-  created_at: string;
+  created_at?: string;
 }
 
 export const useUserStatistics = () => {
   const { user } = useAuth();
-  const [statistics, setStatistics] = useState<UserStatistics | null>(null);
-  const [dailyStats, setDailyStats] = useState<DailyStatistics[]>([]);
+  const [statistics, setStatistics] = useState<InternalStatistics | null>(null);
+  const [dailyStats, setDailyStats] = useState<InternalDailyStatistics[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 将 API 返回的驼峰命名转换为下划线命名（兼容旧代码）
+  const convertStats = (data: UserStatistics): InternalStatistics => ({
+    total_watch_time: data.totalWatchTime || 0,
+    total_practice_time: data.totalPracticeTime || 0,
+    today_watch_time: data.todayWatchTime || 0,
+    today_practice_time: data.todayPracticeTime || 0,
+    total_videos_watched: data.totalVideosWatched || 0,
+    total_sentences_completed: data.totalSentencesCompleted || 0,
+    total_words_learned: data.totalWordsLearned || 0,
+    total_assessments: data.totalAssessments || 0,
+    current_streak: data.currentStreak || 0,
+    longest_streak: data.longestStreak || 0,
+    last_study_date: data.lastStudyDate || null,
+  });
 
   // 获取用户统计数据
   const fetchStatistics = useCallback(async () => {
@@ -47,33 +66,31 @@ export const useUserStatistics = () => {
 
     try {
       // 获取用户汇总统计
-      const { data: statsData, error: statsError } = await supabase
-        .from('user_statistics')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (statsError) {
-        console.error('Failed to fetch user statistics:', statsError);
-      } else if (statsData) {
-        setStatistics(statsData as UserStatistics);
-      }
+      const statsData = await learningApi.getStatistics();
+      setStatistics(convertStats(statsData));
 
       // 获取最近90天的每日统计
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      const { data: dailyData, error: dailyError } = await supabase
-        .from('daily_statistics')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('study_date', ninetyDaysAgo.toISOString().split('T')[0])
-        .order('study_date', { ascending: true });
+      const dailyData = await learningApi.getDailyStatistics({
+        startDate: ninetyDaysAgo.toISOString().split('T')[0],
+        limit: 90
+      });
 
-      if (dailyError) {
-        console.error('Failed to fetch daily statistics:', dailyError);
-      } else if (dailyData) {
-        setDailyStats(dailyData as DailyStatistics[]);
-      }
+      // 转换每日统计数据格式
+      const convertedDaily: InternalDailyStatistics[] = dailyData.map((d: any) => ({
+        id: d.id,
+        user_id: d.user_id,
+        study_date: d.study_date,
+        watch_time: d.watch_time || 0,
+        practice_time: d.practice_time || 0,
+        sentences_completed: d.sentences_completed || 0,
+        words_learned: d.words_learned || 0,
+        videos_watched: d.videos_watched || 0,
+        created_at: d.created_at,
+      }));
+
+      setDailyStats(convertedDaily);
     } catch (error) {
       console.error('Failed to fetch statistics:', error);
     } finally {

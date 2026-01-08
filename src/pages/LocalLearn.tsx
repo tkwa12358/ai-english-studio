@@ -6,16 +6,23 @@ import { Label } from '@/components/ui/label';
 import { Upload, FileVideo, FileText, Play, ArrowLeft, CheckCircle, Eye, EyeOff, Clock, CheckCircle2, Languages } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { parseSRT, parseBilingualSRT, Subtitle } from '@/lib/supabase';
+import { parseSRT, parseBilingualSRT, Subtitle, authCodesApi } from '@/lib/api-client';
 import { Header } from '@/components/Header';
 import { VideoPlayer, VideoPlayerRef } from '@/components/VideoPlayer';
 import { SubtitleList } from '@/components/SubtitleList';
 import { ProfessionalAssessment } from '@/components/ProfessionalAssessment';
 import { WordLookup } from '@/components/WordLookup';
+import { ActivationDialog } from '@/components/ActivationDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 const LocalLearn: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, profile } = useAuth();
+
+  // 激活状态
+  const [isActivated, setIsActivated] = useState<boolean | null>(null);
+  const [showActivationDialog, setShowActivationDialog] = useState(false);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
@@ -38,6 +45,43 @@ const LocalLearn: React.FC = () => {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const srtInputRef = useRef<HTMLInputElement>(null);
   const playerRef = useRef<VideoPlayerRef>(null);
+
+  // 检查用户是否已激活
+  useEffect(() => {
+    const checkActivation = async () => {
+      if (!user) {
+        setIsActivated(null);
+        return;
+      }
+
+      try {
+        const codes = await authCodesApi.getMyAuthCodes();
+        const hasAppUnlockCode = codes.some(
+          (c: any) => (c.code_type === 'registration' || c.code_type === 'app_unlock') && c.is_used
+        );
+        setIsActivated(hasAppUnlockCode);
+      } catch (error) {
+        console.warn('检查激活状态失败:', error);
+        setIsActivated(false);
+      }
+    };
+    checkActivation();
+  }, [user]);
+
+  // 检查是否可以访问本地学习功能
+  const canAccessLocalLearn = useCallback(() => {
+    if (!profile) return false;
+    if (profile.role === 'admin') return true;
+    if (isActivated) return true;
+
+    // 检查试用期（30天）
+    const TRIAL_DAYS = 30;
+    const registerDate = new Date(profile.created_at);
+    const daysSinceRegister = Math.floor(
+      (Date.now() - registerDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return daysSinceRegister < TRIAL_DAYS;
+  }, [profile, isActivated]);
 
   const handleVideoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -226,6 +270,12 @@ const LocalLearn: React.FC = () => {
   }, [practiceTime]);
 
   const startLearning = useCallback(() => {
+    // 检查激活状态
+    if (!canAccessLocalLearn()) {
+      setShowActivationDialog(true);
+      return;
+    }
+
     if (!videoUrl) {
       toast({
         title: '请先上传视频',
@@ -243,7 +293,7 @@ const LocalLearn: React.FC = () => {
     }
     setIsLearning(true);
     practiceStartRef.current = Date.now();
-  }, [videoUrl, subtitlesEn.length, toast]);
+  }, [videoUrl, subtitlesEn.length, toast, canAccessLocalLearn]);
 
   if (isLearning) {
     return (
@@ -537,6 +587,16 @@ const LocalLearn: React.FC = () => {
             </div>
           </div>
         </main>
+
+        {/* 激活对话框 */}
+        <ActivationDialog
+          open={showActivationDialog}
+          onOpenChange={setShowActivationDialog}
+          onActivated={() => {
+            setIsActivated(true);
+            setShowActivationDialog(false);
+          }}
+        />
       </div>
     </>
   );

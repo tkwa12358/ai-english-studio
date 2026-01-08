@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, VideoCategory } from '@/lib/supabase';
-import { Upload, ChevronDown } from 'lucide-react';
+import { categoriesApi, VideoCategory } from '@/lib/api-client';
+import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -28,13 +28,11 @@ export const CategoryTabs: React.FC<CategoryTabsProps> = ({
     }, []);
 
     const fetchCategories = async () => {
-        const { data, error } = await supabase
-            .from('video_categories')
-            .select('*')
-            .order('sort_order', { ascending: true });
-
-        if (!error && data) {
-            setCategories(data as VideoCategory[]);
+        try {
+            const data = await categoriesApi.getCategories();
+            setCategories(data);
+        } catch (error) {
+            console.error('获取分类失败:', error);
         }
     };
 

@@ -27,9 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2, ImagePlus, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, CheckCircle2, ImagePlus, RefreshCw } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, Video, VideoCategory } from '@/lib/supabase';
+import { videosApi, categoriesApi, Video, VideoCategory } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -38,8 +38,8 @@ const generateThumbnail = (videoFile: File): Promise<Blob> => {
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.onloadedmetadata = () => {
-      // Capture at 0.1s to ensure we have a frame but stays at start
-      video.currentTime = 0.1;
+      // Capture at 0.5s to get a meaningful frame
+      video.currentTime = 0.5;
     };
     video.onseeked = () => {
       try {
@@ -201,32 +201,25 @@ const AdminVideos: React.FC = () => {
   const { data: videos = [] } = useQuery({
     queryKey: ['admin-videos'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('videos')
-        .select('*')
-        .order('created_at', { ascending: false });
-      return data as Video[];
+      const data = await videosApi.getVideos();
+      return data;
     },
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('video_categories')
-        .select('*')
-        .order('sort_order');
-      return data as VideoCategory[];
+      const data = await categoriesApi.getCategories();
+      return data;
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase.from('videos').insert({
+      await videosApi.createVideo({
         ...data,
         category_id: data.category_id || null,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-videos'] });
@@ -234,21 +227,17 @@ const AdminVideos: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '创建失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-      const { error } = await supabase
-        .from('videos')
-        .update({
-          ...data,
-          category_id: data.category_id || null,
-        })
-        .eq('id', id);
-      if (error) throw error;
+      await videosApi.updateVideo(id, {
+        ...data,
+        category_id: data.category_id || null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-videos'] });
@@ -256,21 +245,20 @@ const AdminVideos: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '更新失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('videos').delete().eq('id', id);
-      if (error) throw error;
+      await videosApi.deleteVideo(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-videos'] });
       toast({ title: '视频删除成功' });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '删除失败', description: error.message, variant: 'destructive' });
     },
   });
@@ -388,18 +376,9 @@ const AdminVideos: React.FC = () => {
 
                             setUploading(true);
                             try {
-                              // 1. Upload Video
-                              const fileName = `${Date.now()}-${file.name.replace(/[^\x00-\x7F]/g, '')}`;
-
-                              const { error: uploadError } = await supabase.storage
-                                .from('videos')
-                                .upload(fileName, file);
-
-                              if (uploadError) throw uploadError;
-
-                              const { data: { publicUrl: videoUrl } } = supabase.storage
-                                .from('videos')
-                                .getPublicUrl(fileName);
+                              // 1. Upload Video using API
+                              const videoResult = await videosApi.uploadVideo(file);
+                              const videoUrl = videoResult.url;
 
                               // 2. Generate and Upload Thumbnail
                               toast({ title: '视频上传成功', description: '正在生成封面图...' });
@@ -407,19 +386,10 @@ const AdminVideos: React.FC = () => {
                               let thumbnailUrl = '';
                               try {
                                 const thumbBlob = await generateThumbnail(file);
-                                const thumbFile = new File([thumbBlob], `thumb-${fileName}.jpg`, { type: 'image/jpeg' });
-                                const thumbName = `thumb-${Date.now()}.jpg`;
+                                const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
 
-                                const { error: thumbError } = await supabase.storage
-                                  .from('thumbnails')
-                                  .upload(thumbName, thumbFile);
-
-                                if (!thumbError) {
-                                  const { data: { publicUrl: tUrl } } = supabase.storage
-                                    .from('thumbnails')
-                                    .getPublicUrl(thumbName);
-                                  thumbnailUrl = tUrl;
-                                }
+                                const thumbResult = await videosApi.uploadThumbnail(thumbFile);
+                                thumbnailUrl = thumbResult.url;
                               } catch (thumbErr) {
                                 console.error('Thumbnail generation failed', thumbErr);
                                 toast({ title: '封面生成失败', description: '请稍后重试或忽略', variant: 'destructive' });
@@ -474,19 +444,10 @@ const AdminVideos: React.FC = () => {
                                       try {
                                         const thumbBlob = await generateThumbnailFromUrl(formData.video_url);
                                         const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
-                                        const thumbName = `thumb-${Date.now()}.jpg`;
 
-                                        const { error: thumbError } = await supabase.storage
-                                          .from('thumbnails')
-                                          .upload(thumbName, thumbFile);
+                                        const thumbResult = await videosApi.uploadThumbnail(thumbFile);
 
-                                        if (thumbError) throw thumbError;
-
-                                        const { data: { publicUrl } } = supabase.storage
-                                          .from('thumbnails')
-                                          .getPublicUrl(thumbName);
-
-                                        setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
                                         toast({ title: '封面已重新生成' });
                                       } catch (err: any) {
                                         toast({ title: '生成失败', description: err.message, variant: 'destructive' });
@@ -516,15 +477,8 @@ const AdminVideos: React.FC = () => {
                                       if (!file) return;
                                       setUploadingThumbnail(true);
                                       try {
-                                        const thumbName = `thumb-${Date.now()}.jpg`;
-                                        const { error } = await supabase.storage
-                                          .from('thumbnails')
-                                          .upload(thumbName, file);
-                                        if (error) throw error;
-                                        const { data: { publicUrl } } = supabase.storage
-                                          .from('thumbnails')
-                                          .getPublicUrl(thumbName);
-                                        setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                        const thumbResult = await videosApi.uploadThumbnail(file);
+                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
                                         toast({ title: '封面已上传' });
                                       } catch (err: any) {
                                         toast({ title: '上传失败', description: err.message, variant: 'destructive' });
@@ -553,19 +507,10 @@ const AdminVideos: React.FC = () => {
                                     try {
                                       const thumbBlob = await generateThumbnailFromUrl(formData.video_url);
                                       const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
-                                      const thumbName = `thumb-${Date.now()}.jpg`;
 
-                                      const { error: thumbError } = await supabase.storage
-                                        .from('thumbnails')
-                                        .upload(thumbName, thumbFile);
+                                      const thumbResult = await videosApi.uploadThumbnail(thumbFile);
 
-                                      if (thumbError) throw thumbError;
-
-                                      const { data: { publicUrl } } = supabase.storage
-                                        .from('thumbnails')
-                                        .getPublicUrl(thumbName);
-
-                                      setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
                                       toast({ title: '封面已生成' });
                                     } catch (err: any) {
                                       toast({ title: '生成失败', description: err.message, variant: 'destructive' });
@@ -595,15 +540,8 @@ const AdminVideos: React.FC = () => {
                                     if (!file) return;
                                     setUploadingThumbnail(true);
                                     try {
-                                      const thumbName = `thumb-${Date.now()}.jpg`;
-                                      const { error } = await supabase.storage
-                                        .from('thumbnails')
-                                        .upload(thumbName, file);
-                                      if (error) throw error;
-                                      const { data: { publicUrl } } = supabase.storage
-                                        .from('thumbnails')
-                                        .getPublicUrl(thumbName);
-                                      setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+                                      const thumbResult = await videosApi.uploadThumbnail(file);
+                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
                                       toast({ title: '封面已上传' });
                                     } catch (err: any) {
                                       toast({ title: '上传失败', description: err.message, variant: 'destructive' });
@@ -733,14 +671,5 @@ const AdminVideos: React.FC = () => {
     </AdminLayout>
   );
 };
-
-// Start of update: Add CheckCircle2 to imports
-// I need to start imports from line 1.
-// ... Oh, I am writing the WHOLE file.
-// I missed `CheckCircle2` in the imports list in the string above. 
-// I used it in JSX: <CheckCircle2 ... />
-// I must update the import line: 
-// import { Plus, Pencil, Trash2, Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
-// I will correct this in the `CodeContent`.
 
 export default AdminVideos;

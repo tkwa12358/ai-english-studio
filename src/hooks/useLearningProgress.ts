@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { learningApi, LearningProgress as ApiLearningProgress } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface LearningProgress {
-  id: string;
+  id?: string;
   video_id: string | null;
   last_position: number;
   completed_sentences: number[];
   total_practice_time: number;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export const useLearningProgress = (videoId: string | null) => {
@@ -30,19 +30,25 @@ export const useLearningProgress = (videoId: string | null) => {
     // 重置计时器状态
     startTimeRef.current = null;
 
-    const { data, error } = await supabase
-      .from('learning_progress')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('video_id', videoId)
-      .maybeSingle();
-
-    if (!error && data) {
-      setProgress(data as LearningProgress);
-      accumulatedTimeRef.current = data.total_practice_time || 0;
-      isNewVideoRef.current = false;
-    } else {
-      // 新视频
+    try {
+      const data = await learningApi.getProgress(videoId) as ApiLearningProgress;
+      if (data && data.video_id) {
+        setProgress({
+          id: data.id,
+          video_id: data.video_id,
+          last_position: data.last_position || 0,
+          completed_sentences: data.completed_sentences || [],
+          total_practice_time: data.total_practice_time || 0,
+        });
+        accumulatedTimeRef.current = data.total_practice_time || 0;
+        isNewVideoRef.current = false;
+      } else {
+        // 新视频
+        isNewVideoRef.current = true;
+        accumulatedTimeRef.current = 0;
+      }
+    } catch (error) {
+      // 新视频或获取失败
       isNewVideoRef.current = true;
       accumulatedTimeRef.current = 0;
     }
@@ -92,52 +98,26 @@ export const useLearningProgress = (videoId: string | null) => {
 
     console.log('[LearningProgress] savePosition: position=', position, 'currentTime=', currentTime, 'previousTime=', previousTime, 'newWatchTime=', newWatchTime);
 
-    const updateData = {
-      last_position: Math.floor(position),
-      total_practice_time: currentTime,
-      updated_at: new Date().toISOString(),
-    };
+    try {
+      await learningApi.updateProgress({
+        videoId,
+        lastPosition: Math.floor(position),
+        practiceTime: newWatchTime,
+        completedSentences: progress?.completed_sentences || [],
+      });
 
-    // 保存到 learning_progress 表
-    if (progress) {
-      await supabase
-        .from('learning_progress')
-        .update(updateData)
-        .eq('id', progress.id);
-    } else {
-      const { data } = await supabase
-        .from('learning_progress')
-        .insert({
-          user_id: user.id,
-          video_id: videoId,
-          ...updateData,
-          completed_sentences: [],
-        })
-        .select()
-        .single();
+      // 更新本地状态
+      setProgress(prev => ({
+        ...prev,
+        video_id: videoId,
+        last_position: Math.floor(position),
+        total_practice_time: currentTime,
+        completed_sentences: prev?.completed_sentences || [],
+      }));
 
-      if (data) {
-        setProgress(data as LearningProgress);
-      }
-    }
-
-    // 更新用户统计（有新增时长或是新视频时更新）
-    const isNewVideo = isNewVideoRef.current;
-    if (newWatchTime > 0 || isNewVideo) {
-      try {
-        await supabase.rpc('update_user_statistics', {
-          p_user_id: user.id,
-          p_watch_time: newWatchTime,
-          p_practice_time: 0,
-          p_sentences_completed: 0,
-          p_words_learned: 0,
-          p_videos_watched: isNewVideo ? 1 : 0,
-          p_assessments: 0,
-        });
-        isNewVideoRef.current = false;
-      } catch (error) {
-        console.error('Failed to update user statistics:', error);
-      }
+      isNewVideoRef.current = false;
+    } catch (error) {
+      console.error('Failed to save position:', error);
     }
 
     lastSaveTimeRef.current = Date.now();
@@ -152,51 +132,26 @@ export const useLearningProgress = (videoId: string | null) => {
 
     const newCompleted = [...currentCompleted, sentenceIndex].sort((a, b) => a - b);
 
-    if (progress) {
-      const { data } = await supabase
-        .from('learning_progress')
-        .update({
-          completed_sentences: newCompleted,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', progress.id)
-        .select()
-        .single();
-
-      if (data) {
-        setProgress(data as LearningProgress);
-      }
-    } else {
-      const { data } = await supabase
-        .from('learning_progress')
-        .insert({
-          user_id: user.id,
-          video_id: videoId,
-          last_position: 0,
-          completed_sentences: newCompleted,
-          total_practice_time: accumulatedTimeRef.current,
-        })
-        .select()
-        .single();
-
-      if (data) {
-        setProgress(data as LearningProgress);
-      }
-    }
-
-    // 更新用户统计 - 新增完成句子
     try {
-      await supabase.rpc('update_user_statistics', {
-        p_user_id: user.id,
-        p_watch_time: 0,
-        p_practice_time: 0,
-        p_sentences_completed: 1,
-        p_words_learned: 0,
-        p_videos_watched: 0,
-        p_assessments: 0,
+      await learningApi.updateProgress({
+        videoId,
+        completedSentences: newCompleted,
+      });
+
+      setProgress(prev => ({
+        ...prev,
+        video_id: videoId,
+        last_position: prev?.last_position || 0,
+        total_practice_time: prev?.total_practice_time || 0,
+        completed_sentences: newCompleted,
+      }));
+
+      // 更新用户统计
+      await learningApi.updateStatistics({
+        sentencesCompleted: 1,
       });
     } catch (error) {
-      console.error('Failed to update sentence statistics:', error);
+      console.error('Failed to mark sentence completed:', error);
     }
   }, [user, videoId, progress]);
 
@@ -205,14 +160,8 @@ export const useLearningProgress = (videoId: string | null) => {
     if (!user || practiceSeconds <= 0) return;
 
     try {
-      await supabase.rpc('update_user_statistics', {
-        p_user_id: user.id,
-        p_watch_time: 0,
-        p_practice_time: practiceSeconds,
-        p_sentences_completed: 0,
-        p_words_learned: 0,
-        p_videos_watched: 0,
-        p_assessments: 1,
+      await learningApi.updateStatistics({
+        practiceTime: practiceSeconds,
       });
     } catch (error) {
       console.error('Failed to update practice time:', error);

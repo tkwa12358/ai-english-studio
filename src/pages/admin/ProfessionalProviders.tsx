@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import type { Json } from '@/integrations/supabase/types';
 import {
   Table,
   TableBody,
@@ -29,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Crown, Star } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { assessmentApi, AssessmentProvider } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,36 +39,17 @@ const PROVIDER_TYPES = [
   { value: 'ifly', label: '讯飞语音评测', description: '国内领先的语音评测' },
 ];
 
-interface Provider {
-  id: string;
-  name: string;
-  provider_type: string;
-  api_endpoint: string;
-  api_key_secret_name: string | null;
-  api_secret_key_name: string | null;
-  region: string | null;
-  is_active: boolean;
-  is_default: boolean;
-  priority: number;
-  config_json: {
-    api_key?: string;
-    api_secret?: string;
-    [key: string]: unknown;
-  };
-  created_at: string;
-}
-
 const AdminProfessionalProviders: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+  const [editingProvider, setEditingProvider] = useState<AssessmentProvider | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     provider_type: 'azure',
     api_endpoint: '',
-    api_key: '', // 直接输入的 API Key
-    api_secret: '', // 直接输入的 API Secret (腾讯/讯飞需要)
+    api_key: '',
+    api_secret: '',
     region: '',
     is_active: true,
     is_default: false,
@@ -79,32 +59,26 @@ const AdminProfessionalProviders: React.FC = () => {
   const { data: providers = [] } = useQuery({
     queryKey: ['admin-professional-providers'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('professional_assessment_providers')
-        .select('*')
-        .order('priority', { ascending: false });
-      return data as Provider[];
+      const data = await assessmentApi.getProviders();
+      return data;
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      // 将 API Key 存储到 config_json 中，不在表单数据中暴露
       const configJson: { api_key?: string; api_secret?: string } = {};
       if (data.api_key) configJson.api_key = data.api_key;
       if (data.api_secret) configJson.api_secret = data.api_secret;
 
-      const { error } = await supabase.from('professional_assessment_providers').insert([{
+      await assessmentApi.createProvider({
         name: data.name,
-        provider_type: data.provider_type,
-        api_endpoint: data.api_endpoint,
-        region: data.region || null,
-        is_active: data.is_active,
-        is_default: data.is_default,
+        providerType: data.provider_type,
+        apiEndpoint: data.api_endpoint,
+        region: data.region || undefined,
+        isDefault: data.is_default,
         priority: data.priority,
-        config_json: configJson,
-      }]);
-      if (error) throw error;
+        configJson: configJson,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
@@ -112,48 +86,27 @@ const AdminProfessionalProviders: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '创建失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-      // 构建更新对象
-      interface UpdatePayload {
-        name: string;
-        provider_type: string;
-        api_endpoint: string;
-        region: string | null;
-        is_active: boolean;
-        is_default: boolean;
-        priority: number;
-        config_json?: Json;
-      }
+      const configJson: { api_key?: string; api_secret?: string } = {};
+      if (data.api_key) configJson.api_key = data.api_key;
+      if (data.api_secret) configJson.api_secret = data.api_secret;
 
-      const updateData: UpdatePayload = {
+      await assessmentApi.updateProvider(id, {
         name: data.name,
-        provider_type: data.provider_type,
-        api_endpoint: data.api_endpoint,
-        region: data.region || null,
-        is_active: data.is_active,
-        is_default: data.is_default,
+        providerType: data.provider_type,
+        apiEndpoint: data.api_endpoint,
+        region: data.region || undefined,
+        isActive: data.is_active,
+        isDefault: data.is_default,
         priority: data.priority,
-      };
-
-      // 如果输入了新的 API Key，更新 config_json
-      if (data.api_key || data.api_secret) {
-        const configJson: { api_key?: string; api_secret?: string } = {};
-        if (data.api_key) configJson.api_key = data.api_key;
-        if (data.api_secret) configJson.api_secret = data.api_secret;
-        updateData.config_json = configJson;
-      }
-
-      const { error } = await supabase
-        .from('professional_assessment_providers')
-        .update(updateData)
-        .eq('id', id);
-      if (error) throw error;
+        ...(Object.keys(configJson).length > 0 ? { configJson } : {}),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
@@ -161,38 +114,27 @@ const AdminProfessionalProviders: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '更新失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('professional_assessment_providers').delete().eq('id', id);
-      if (error) throw error;
+      await assessmentApi.deleteProvider(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
       toast({ title: '服务商配置删除成功' });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '删除失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const setDefaultMutation = useMutation({
     mutationFn: async (id: string) => {
-      // 先取消所有默认
-      await supabase
-        .from('professional_assessment_providers')
-        .update({ is_default: false })
-        .neq('id', id);
-      // 设置新默认
-      const { error } = await supabase
-        .from('professional_assessment_providers')
-        .update({ is_default: true })
-        .eq('id', id);
-      if (error) throw error;
+      await assessmentApi.setDefaultProvider(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-professional-providers'] });
@@ -215,18 +157,18 @@ const AdminProfessionalProviders: React.FC = () => {
     setEditingProvider(null);
   };
 
-  const handleEdit = (provider: Provider) => {
+  const handleEdit = (provider: AssessmentProvider) => {
     setEditingProvider(provider);
     setFormData({
       name: provider.name,
       provider_type: provider.provider_type,
-      api_endpoint: provider.api_endpoint,
-      api_key: '', // 编辑时不显示已存储的密钥，留空表示不修改
+      api_endpoint: provider.api_endpoint || '',
+      api_key: '',
       api_secret: '',
       region: provider.region || '',
       is_active: provider.is_active,
       is_default: provider.is_default,
-      priority: provider.priority,
+      priority: provider.priority || 0,
     });
     setIsOpen(true);
   };

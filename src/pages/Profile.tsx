@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Crown, Clock, Key, Loader2, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { authCodesApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 
 const Profile: React.FC = () => {
@@ -28,27 +28,20 @@ const Profile: React.FC = () => {
 
     setIsRedeeming(true);
     try {
-      const { data, error } = await supabase.functions.invoke('redeem-code', {
-        body: { code: code.trim() },
-      });
-
-      if (error) throw error;
-
-      if (data?.error) {
-        toast({ title: '兑换失败', description: data.error, variant: 'destructive' });
-        return;
-      }
+      const data = await authCodesApi.redeemCode(code.trim());
 
       toast({
         title: '兑换成功',
-        description: data.message,
+        description: data.message || '授权码兑换成功',
       });
       setCode('');
       await refreshProfile();
     } catch (error: any) {
+      console.error('Redeem error:', error);
+      const errorMessage = error.response?.data?.error || error.message || '请检查授权码是否正确';
       toast({
         title: '兑换失败',
-        description: error.message || '请检查授权码是否正确',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -62,10 +55,10 @@ const Profile: React.FC = () => {
         <title>个人资料 - AI English Club</title>
         <meta name="description" content="查看个人资料和评测时间" />
       </Helmet>
-      
+
       <div className="min-h-screen gradient-bg dark:gradient-bg-dark">
         <Header />
-        
+
         <main className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto space-y-6">
             <h1 className="text-2xl font-bold">个人资料</h1>
@@ -113,7 +106,7 @@ const Profile: React.FC = () => {
                     <p className="text-sm text-muted-foreground">剩余评测秒数</p>
                   </div>
                 </div>
-                
+
                 <div className="mt-4 text-sm text-muted-foreground">
                   <p>• 音素级精准评分</p>
                   <p>• 单词级发音纠错</p>

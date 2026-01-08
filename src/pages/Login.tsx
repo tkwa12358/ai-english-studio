@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/integrations/supabase/client';
 
 const Login = () => {
   const [account, setAccount] = useState('');
@@ -15,32 +14,6 @@ const Login = () => {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  useEffect(() => {
-    // 调试连接信息
-    const checkConnection = async () => {
-      try {
-        console.log('Testing Supabase Connection...');
-        // @ts-ignore
-        const currentUrl = supabase.supabaseUrl || (supabase as any).params?.supabaseUrl || 'unknown';
-        console.log('Current Supabase URL:', currentUrl);
-
-        const { error } = await supabase.from('word_book').select('count', { count: 'exact', head: true });
-
-        if (error) {
-          console.error('Connection Check Failed:', error);
-          // 只有在真正失败时才强提醒，避免干扰正常用户（如果只是 401 可能正常）
-          // 但 word_book 如果没登录可能 401。
-          // 试试查 public 表？或者不做请求，只打印 URL。
-        } else {
-          console.log('Connection Check Passed (Public Access or Cached Session)');
-        }
-      } catch (e) {
-        console.error('Connection Check Error:', e);
-      }
-    };
-    checkConnection();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

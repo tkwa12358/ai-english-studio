@@ -6,11 +6,13 @@ import {
   Video,
   Tag,
   Users,
-  Key,
   ArrowLeft,
   BookOpen,
   Crown,
   Languages,
+  Smartphone,
+  Unlock,
+  Timer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +25,9 @@ const navItems = [
   { path: '/admin/videos', label: '视频管理', icon: Video },
   { path: '/admin/categories', label: '分类管理', icon: Tag },
   { path: '/admin/users', label: '用户管理', icon: Users },
-  { path: '/admin/auth-codes', label: '授权码管理', icon: Key },
+  { path: '/admin/devices', label: '设备管理', icon: Smartphone },
+  { path: '/admin/app-codes', label: '应用授权码', icon: Unlock },
+  { path: '/admin/pro-codes', label: '评测授权码', icon: Timer },
   { path: '/admin/professional', label: '专业评测', icon: Crown },
   { path: '/admin/dictionary', label: '词库管理', icon: BookOpen },
   { path: '/admin/translation', label: '翻译配置', icon: Languages },

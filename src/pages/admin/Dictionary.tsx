@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/integrations/supabase/client';
+import { wordsApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
-import { BookOpen, Download, RefreshCw, Database, CheckCircle, Loader2 } from 'lucide-react';
+import { BookOpen, Download, RefreshCw, Database, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -21,6 +21,7 @@ interface DictionaryInfo {
   name: string;
   description: string;
   wordCount: number;
+  available: boolean;
 }
 
 interface ImportStatus {
@@ -30,16 +31,9 @@ interface ImportStatus {
   message: string;
 }
 
-const DICTIONARIES: DictionaryInfo[] = [
-  { id: 'cet4', name: 'CET-4 四级词汇', description: '大学英语四级核心词汇', wordCount: 4500 },
-  { id: 'cet6', name: 'CET-6 六级词汇', description: '大学英语六级核心词汇', wordCount: 5500 },
-  { id: 'junior', name: '初中词汇', description: '初中阶段必备词汇', wordCount: 1600 },
-  { id: 'senior', name: '高中词汇', description: '高中阶段必备词汇', wordCount: 3500 },
-  { id: 'toefl', name: '托福词汇', description: 'TOEFL考试核心词汇', wordCount: 8000 },
-];
-
 const AdminDictionary: React.FC = () => {
   const { toast } = useToast();
+  const [dictionaries, setDictionaries] = useState<DictionaryInfo[]>([]);
   const [stats, setStats] = useState({
     totalWords: 0,
     withPhonetic: 0,
@@ -47,6 +41,7 @@ const AdminDictionary: React.FC = () => {
     withDefinitions: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadingDicts, setLoadingDicts] = useState(true);
   const [importStatus, setImportStatus] = useState<ImportStatus>({
     isImporting: false,
     currentDict: '',
@@ -54,37 +49,33 @@ const AdminDictionary: React.FC = () => {
     message: '',
   });
 
+  const fetchDictionaries = async () => {
+    setLoadingDicts(true);
+    try {
+      const data = await wordsApi.getDictionaries();
+      setDictionaries(data);
+    } catch (error) {
+      console.error('Failed to fetch dictionaries:', error);
+      toast({
+        title: '获取词库列表失败',
+        description: '无法获取可用词库列表',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingDicts(false);
+    }
+  };
+
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // Get total count
-      const { count: totalWords } = await supabase
-        .from('word_cache')
-        .select('*', { count: 'exact', head: true });
-
-      // Get words with phonetic
-      const { count: withPhonetic } = await supabase
-        .from('word_cache')
-        .select('*', { count: 'exact', head: true })
-        .not('phonetic', 'is', null);
-
-      // Get words with translation
-      const { count: withTranslation } = await supabase
-        .from('word_cache')
-        .select('*', { count: 'exact', head: true })
-        .not('translation', 'is', null);
-
-      // Get words with definitions
-      const { count: withDefinitions } = await supabase
-        .from('word_cache')
-        .select('*', { count: 'exact', head: true })
-        .not('definitions', 'eq', '[]');
+      const data = await wordsApi.getStats();
 
       setStats({
-        totalWords: totalWords || 0,
-        withPhonetic: withPhonetic || 0,
-        withTranslation: withTranslation || 0,
-        withDefinitions: withDefinitions || 0,
+        totalWords: data.totalWords || 0,
+        withPhonetic: data.withPhonetic || 0,
+        withTranslation: data.withTranslation || 0,
+        withDefinitions: data.withDefinitions || 0,
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
@@ -99,38 +90,35 @@ const AdminDictionary: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchDictionaries();
     fetchStats();
   }, []);
 
-  const importDictionary = async (dictId: string) => {
+  const importDictionary = async (dictId: string, dictName: string) => {
     setImportStatus({
       isImporting: true,
       currentDict: dictId,
-      progress: 0,
-      message: `正在导入 ${dictId} 词库...`,
+      progress: 10,
+      message: `正在导入 ${dictName} 词库...`,
     });
 
     try {
-      const { data, error } = await supabase.functions.invoke('import-dictionary', {
-        body: { action: 'import', dictionary: dictId },
-      });
+      const result = await wordsApi.importDictionary(dictId, 'import');
 
-      if (error) throw error;
+      setImportStatus(prev => ({ ...prev, progress: 100, message: `导入完成! ${result.imported || 0} 个单词` }));
 
-      setImportStatus(prev => ({ ...prev, progress: 100, message: '导入完成!' }));
-      
       toast({
         title: '导入成功',
-        description: `${dictId} 词库已成功导入`,
+        description: `${dictName} 词库已成功导入 ${result.imported || 0} 个单词`,
       });
 
       // Refresh stats
       await fetchStats();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Import failed:', error);
       toast({
         title: '导入失败',
-        description: error instanceof Error ? error.message : '导入词库时出错',
+        description: error?.response?.data?.error || error?.message || '导入词库时出错',
         variant: 'destructive',
       });
     } finally {
@@ -141,7 +129,7 @@ const AdminDictionary: React.FC = () => {
           progress: 0,
           message: '',
         });
-      }, 1000);
+      }, 2000);
     }
   };
 
@@ -149,30 +137,30 @@ const AdminDictionary: React.FC = () => {
     setImportStatus({
       isImporting: true,
       currentDict: 'all',
-      progress: 0,
+      progress: 5,
       message: '正在导入所有词库...',
     });
 
     try {
-      const { data, error } = await supabase.functions.invoke('import-dictionary', {
-        body: { action: 'import-all' },
-      });
+      const result = await wordsApi.importDictionary('all', 'import-all');
 
-      if (error) throw error;
+      setImportStatus(prev => ({
+        ...prev,
+        progress: 100,
+        message: `所有词库导入完成! 共 ${result.totalImported || 0} 个单词`
+      }));
 
-      setImportStatus(prev => ({ ...prev, progress: 100, message: '所有词库导入完成!' }));
-      
       toast({
         title: '导入成功',
-        description: '所有词库已成功导入',
+        description: `所有词库已成功导入，共 ${result.totalImported || 0} 个单词`,
       });
 
       await fetchStats();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Import all failed:', error);
       toast({
         title: '导入失败',
-        description: error instanceof Error ? error.message : '导入词库时出错',
+        description: error?.response?.data?.error || error?.message || '导入词库时出错',
         variant: 'destructive',
       });
     } finally {
@@ -183,9 +171,12 @@ const AdminDictionary: React.FC = () => {
           progress: 0,
           message: '',
         });
-      }, 1000);
+      }, 2000);
     }
   };
+
+  const totalDictWords = dictionaries.reduce((sum, d) => sum + d.wordCount, 0);
+  const availableDicts = dictionaries.filter(d => d.available).length;
 
   return (
     <AdminLayout>
@@ -196,11 +187,14 @@ const AdminDictionary: React.FC = () => {
             <p className="text-muted-foreground">管理和导入词库数据</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={fetchStats} disabled={loading}>
+            <Button variant="outline" onClick={() => { fetchStats(); fetchDictionaries(); }} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              刷新统计
+              刷新
             </Button>
-            <Button onClick={importAllDictionaries} disabled={importStatus.isImporting}>
+            <Button
+              onClick={importAllDictionaries}
+              disabled={importStatus.isImporting || availableDicts === 0}
+            >
               {importStatus.isImporting && importStatus.currentDict === 'all' ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -215,7 +209,7 @@ const AdminDictionary: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>总单词数</CardDescription>
+              <CardDescription>已导入单词</CardDescription>
               <CardTitle className="text-3xl flex items-center gap-2">
                 <Database className="h-6 w-6 text-primary" />
                 {loading ? '...' : stats.totalWords.toLocaleString()}
@@ -230,8 +224,8 @@ const AdminDictionary: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Progress 
-                value={stats.totalWords ? (stats.withPhonetic / stats.totalWords) * 100 : 0} 
+              <Progress
+                value={stats.totalWords ? (stats.withPhonetic / stats.totalWords) * 100 : 0}
                 className="h-2"
               />
             </CardContent>
@@ -244,8 +238,8 @@ const AdminDictionary: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Progress 
-                value={stats.totalWords ? (stats.withTranslation / stats.totalWords) * 100 : 0} 
+              <Progress
+                value={stats.totalWords ? (stats.withTranslation / stats.totalWords) * 100 : 0}
                 className="h-2"
               />
             </CardContent>
@@ -258,8 +252,8 @@ const AdminDictionary: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Progress 
-                value={stats.totalWords ? (stats.withDefinitions / stats.totalWords) * 100 : 0} 
+              <Progress
+                value={stats.totalWords ? (stats.withDefinitions / stats.totalWords) * 100 : 0}
                 className="h-2"
               />
             </CardContent>
@@ -268,11 +262,14 @@ const AdminDictionary: React.FC = () => {
 
         {/* Import Progress */}
         {importStatus.isImporting && (
-          <Card>
+          <Card className="border-primary">
             <CardContent className="pt-6">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{importStatus.message}</span>
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {importStatus.message}
+                  </span>
                   <span className="text-sm text-muted-foreground">{importStatus.progress}%</span>
                 </div>
                 <Progress value={importStatus.progress} className="h-2" />
@@ -287,53 +284,76 @@ const AdminDictionary: React.FC = () => {
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5" />
               可用词库
+              <Badge variant="secondary" className="ml-2">
+                {loadingDicts ? '...' : `${availableDicts}/${dictionaries.length} 可用`}
+              </Badge>
             </CardTitle>
             <CardDescription>
-              选择需要导入的词库，点击导入按钮开始导入
+              共 {totalDictWords.toLocaleString()} 个单词，选择需要导入的词库
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>词库名称</TableHead>
-                  <TableHead>描述</TableHead>
-                  <TableHead className="text-right">预计词汇量</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {DICTIONARIES.map((dict) => (
-                  <TableRow key={dict.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {dict.name}
-                        <Badge variant="outline">{dict.id}</Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>{dict.description}</TableCell>
-                    <TableCell className="text-right">
-                      {dict.wordCount.toLocaleString()} 词
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => importDictionary(dict.id)}
-                        disabled={importStatus.isImporting}
-                      >
-                        {importStatus.isImporting && importStatus.currentDict === dict.id ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4 mr-1" />
-                        )}
-                        导入
-                      </Button>
-                    </TableCell>
+            {loadingDicts ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>词库名称</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead className="text-right">词汇量</TableHead>
+                    <TableHead className="text-center">状态</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {dictionaries.map((dict) => (
+                    <TableRow key={dict.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {dict.name}
+                          <Badge variant="outline" className="text-xs">{dict.id}</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{dict.description}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {dict.wordCount.toLocaleString()} 词
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {dict.available ? (
+                          <Badge variant="default" className="bg-green-500">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            可用
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            未安装
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant={dict.available ? "outline" : "secondary"}
+                          onClick={() => importDictionary(dict.id, dict.name)}
+                          disabled={importStatus.isImporting || !dict.available}
+                        >
+                          {importStatus.isImporting && importStatus.currentDict === dict.id ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-1" />
+                          )}
+                          导入
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -343,10 +363,11 @@ const AdminDictionary: React.FC = () => {
             <CardTitle>使用说明</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>• 点击"一键导入全部"可以导入所有预置词库</p>
-            <p>• 也可以单独导入某个词库，已存在的单词会自动跳过</p>
+            <p>• 词库文件位于 <code className="bg-muted px-1 rounded">data/dictionary/merged/</code> 目录</p>
+            <p>• 点击"一键导入全部"可以导入所有可用词库</p>
+            <p>• 也可以单独导入某个词库，已存在的单词会自动更新</p>
             <p>• 导入过程中请勿关闭页面</p>
-            <p>• 词库数据来源：CET-4/6、中高考词汇表、托福词汇表</p>
+            <p>• 词库涵盖：小学、初中、高中、四六级、考研、托福、雅思、GRE、GMAT、SAT、BEC、专四专八</p>
           </CardContent>
         </Card>
       </div>

@@ -8,7 +8,7 @@ import { WordLookup } from '@/components/WordLookup';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { RecentlyLearned } from '@/components/RecentlyLearned';
 import { ActivationDialog } from '@/components/ActivationDialog';
-import { supabase, Video, Subtitle, parseSRT, getStorageUrl } from '@/lib/supabase';
+import { Video, Subtitle, videosApi, authCodesApi, parseSRT, parseBilingualSRT, getStorageUrl } from '@/lib/api-client';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Loader2, ChevronLeft, Clock, CheckCircle2, Languages } from 'lucide-react';
@@ -68,7 +68,7 @@ const Learn = () => {
     setCurrentSubtitle(null);
   }, [user?.id]);
 
-  // 检查用户是否已激活（通过查询 auth_codes 表）
+  // 检查用户是否已激活（通过API检查是否已使用应用解锁授权码）
   useEffect(() => {
     const checkActivation = async () => {
       if (!user) {
@@ -76,16 +76,18 @@ const Learn = () => {
         return;
       }
 
-      // 检查是否使用过 registration 授权码
-      const { data } = await supabase
-        .from('auth_codes')
-        .select('id')
-        .eq('used_by', user.id)
-        .eq('code_type', 'registration')
-        .eq('is_used', true)
-        .limit(1);
-
-      setIsActivated(data && data.length > 0);
+      try {
+        const codes = await authCodesApi.getMyAuthCodes();
+        // 检查是否有已使用的应用解锁码（registration 或 app_unlock 类型）
+        const hasAppUnlockCode = codes.some(
+          (c: any) => (c.code_type === 'registration' || c.code_type === 'app_unlock') && c.is_used
+        );
+        setIsActivated(hasAppUnlockCode);
+      } catch (error) {
+        // API失败时假设未激活，让试用期逻辑决定
+        console.warn('检查激活状态失败:', error);
+        setIsActivated(false);
+      }
     };
     checkActivation();
   }, [user]);
@@ -113,18 +115,16 @@ const Learn = () => {
   }, [videoId, videos]);
 
   const fetchVideos = async () => {
-    const { data, error } = await supabase
-      .from('videos')
-      .select('*')
-      .eq('is_published', true)
-      .neq('video_url', '')
-      .not('video_url', 'is', null)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setVideos(data as Video[]);
+    try {
+      const data = await videosApi.getVideos({ published: true });
+      // Filter videos with valid video_url
+      const validVideos = data.filter(v => v.video_url && v.video_url.trim() !== '');
+      setVideos(validVideos);
+    } catch (error) {
+      console.error('获取视频列表失败:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Effect to load last played video if no videoId in params
@@ -178,11 +178,29 @@ const Learn = () => {
     setSelectedVideo(video);
     // Persist last played video
     localStorage.setItem('lastVideoId', video.id);
+
+    // 处理字幕：优先使用分离的字幕，如果没有中文字幕则尝试解析双语格式
     if (video.subtitles_en) {
-      setSubtitles(parseSRT(video.subtitles_en));
-    }
-    if (video.subtitles_cn) {
-      setSubtitlesCn(parseSRT(video.subtitles_cn));
+      if (video.subtitles_cn) {
+        // 有分离的中英文字幕
+        setSubtitles(parseSRT(video.subtitles_en));
+        setSubtitlesCn(parseSRT(video.subtitles_cn));
+      } else {
+        // 尝试解析双语格式（英文+中文在同一个SRT文件中）
+        const { en, cn } = parseBilingualSRT(video.subtitles_en);
+        if (cn.length > 0) {
+          // 双语格式成功解析
+          setSubtitles(en);
+          setSubtitlesCn(cn);
+        } else {
+          // 纯英文字幕
+          setSubtitles(parseSRT(video.subtitles_en));
+          setSubtitlesCn([]);
+        }
+      }
+    } else {
+      setSubtitles([]);
+      setSubtitlesCn([]);
     }
   };
 

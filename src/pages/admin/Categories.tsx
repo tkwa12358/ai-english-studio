@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, VideoCategory } from '@/lib/supabase';
+import { categoriesApi, VideoCategory } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -39,18 +39,14 @@ const AdminCategories: React.FC = () => {
   const { data: categories = [] } = useQuery({
     queryKey: ['admin-categories'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('video_categories')
-        .select('*')
-        .order('sort_order');
-      return data as VideoCategory[];
+      const data = await categoriesApi.getCategories();
+      return data;
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase.from('video_categories').insert(data);
-      if (error) throw error;
+      await categoriesApi.createCategory(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
@@ -59,15 +55,14 @@ const AdminCategories: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '创建失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-      const { error } = await supabase.from('video_categories').update(data).eq('id', id);
-      if (error) throw error;
+      await categoriesApi.updateCategory(id, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
@@ -76,22 +71,21 @@ const AdminCategories: React.FC = () => {
       setIsOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '更新失败', description: error.message, variant: 'destructive' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('video_categories').delete().eq('id', id);
-      if (error) throw error;
+      await categoriesApi.deleteCategory(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
       toast({ title: '分类删除成功' });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: '删除失败', description: error.message, variant: 'destructive' });
     },
   });

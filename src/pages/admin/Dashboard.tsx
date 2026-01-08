@@ -3,29 +3,19 @@ import { Helmet } from 'react-helmet-async';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Video, Tag, Key, Clock, TrendingUp } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { adminApi } from '@/lib/api-client';
 import AdminLayout from '@/components/admin/AdminLayout';
 
 const AdminDashboard: React.FC = () => {
   const { data: stats } = useQuery({
     queryKey: ['admin-stats'],
     queryFn: async () => {
-      const [
-        { count: usersCount },
-        { count: videosCount },
-        { count: categoriesCount },
-        { count: codesCount },
-      ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('videos').select('*', { count: 'exact', head: true }),
-        supabase.from('video_categories').select('*', { count: 'exact', head: true }),
-        supabase.from('auth_codes').select('*', { count: 'exact', head: true }).eq('is_used', false),
-      ]);
+      const data = await adminApi.getDashboard();
       return {
-        users: usersCount || 0,
-        videos: videosCount || 0,
-        categories: categoriesCount || 0,
-        unusedCodes: codesCount || 0,
+        users: data.totalUsers || 0,
+        videos: data.totalVideos || 0,
+        categories: data.totalCategories || 0,
+        unusedCodes: data.unusedCodes || 0,
       };
     },
   });
@@ -42,10 +32,10 @@ const AdminDashboard: React.FC = () => {
       <Helmet>
         <title>管理后台 - AI English Club</title>
       </Helmet>
-      
+
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">仪表盘</h1>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {statCards.map((stat) => (
             <Card key={stat.title}>

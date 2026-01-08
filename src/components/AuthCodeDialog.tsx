@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Ticket, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { authCodesApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthCodeDialogProps {
@@ -55,107 +55,34 @@ export const AuthCodeDialog = ({ trigger, open, onOpenChange }: AuthCodeDialogPr
     setLoading(true);
 
     try {
-      // 查询授权码
-      const { data: codeData, error: codeError } = await supabase
-        .from('auth_codes')
-        .select('*')
-        .eq('code', code.trim())
-        .eq('is_used', false)
-        .single();
-
-      if (codeError || !codeData) {
-        toast({
-          variant: 'destructive',
-          title: '授权码无效',
-          description: '授权码不存在或已被使用',
-        });
-        setLoading(false);
-        return;
-      }
-
-      // 检查是否过期
-      if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
-        toast({
-          variant: 'destructive',
-          title: '授权码已过期',
-        });
-        setLoading(false);
-        return;
-      }
-
-      // 检查授权码类型，计算秒数
-      const codeType = codeData.code_type;
-      let secondsToAdd = 0;
-      let isRegistrationCode = false;
-
-      if (codeType === 'registration') {
-        // registration 类型：仅用于激活账号，不增加评测时间
-        isRegistrationCode = true;
-      } else if (codeType === 'pro_10min') {
-        secondsToAdd = 10 * 60; // 600秒
-      } else if (codeType === 'pro_30min') {
-        secondsToAdd = 30 * 60; // 1800秒
-      } else if (codeType === 'pro_60min') {
-        secondsToAdd = 60 * 60; // 3600秒
-      } else if (codeData.minutes_amount) {
-        secondsToAdd = codeData.minutes_amount * 60; // 转换为秒
-      } else {
-        toast({
-          variant: 'destructive',
-          title: '授权码类型不支持',
-          description: '此授权码不能用于充值语音评测时间',
-        });
-        setLoading(false);
-        return;
-      }
-
-      // 如果是评测时间授权码，更新用户的专业评测时间
-      if (!isRegistrationCode && secondsToAdd > 0) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            professional_voice_minutes: professionalSeconds + secondsToAdd,
-          })
-          .eq('user_id', user.id);
-
-        if (updateError) {
-          throw updateError;
-        }
-      }
-
-      // 标记授权码已使用
-      await supabase
-        .from('auth_codes')
-        .update({
-          is_used: true,
-          used_by: user.id,
-          used_at: new Date().toISOString(),
-        })
-        .eq('code', code.trim());
+      // 使用后端 API 兑换授权码
+      const result = await authCodesApi.redeemCode(code.trim());
 
       // 刷新用户信息
       await refreshProfile();
 
-      if (isRegistrationCode) {
+      if (result.codeType === 'registration') {
         toast({
           title: '激活成功',
           description: '您的账号已激活，可以继续使用所有功能',
         });
       } else {
+        const minutesAdded = result.minutesAdded || 0;
         toast({
           title: '充值成功',
-          description: `已添加 ${secondsToAdd} 秒专业评测时间`,
+          description: `已添加 ${minutesAdded * 60} 秒专业评测时间`,
         });
       }
 
       setCode('');
       setIsOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Auth code error:', err);
+      const message = err.response?.data?.error || err.message || '请稍后重试';
       toast({
         variant: 'destructive',
         title: '操作失败',
-        description: '请稍后重试',
+        description: message,
       });
     } finally {
       setLoading(false);

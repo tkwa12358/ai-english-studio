@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Key, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { authCodesApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -34,28 +34,20 @@ const RedeemCode: React.FC<RedeemCodeProps> = ({ trigger }) => {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('redeem-code', {
-        body: { code: code.trim() },
-      });
-
-      if (error) throw error;
-
-      if (data?.error) {
-        toast({ title: '兑换失败', description: data.error, variant: 'destructive' });
-        return;
-      }
+      const data = await authCodesApi.redeemCode(code.trim());
 
       toast({
         title: '兑换成功',
-        description: data.message,
+        description: data.message || `已获得 ${data.minutesAdded || 0} 分钟评测时间`,
       });
       setCode('');
       setIsOpen(false);
       await refreshProfile();
     } catch (error: any) {
+      const message = error.response?.data?.error || error.message || '请检查授权码是否正确';
       toast({
         title: '兑换失败',
-        description: error.message || '请检查授权码是否正确',
+        description: message,
         variant: 'destructive',
       });
     } finally {

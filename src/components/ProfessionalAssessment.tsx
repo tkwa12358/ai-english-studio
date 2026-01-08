@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Mic, Square, Loader2, Volume2, Crown, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { assessmentApi, learningApi } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AuthCodeDialog } from '@/components/AuthCodeDialog';
@@ -69,14 +69,9 @@ export const ProfessionalAssessment = ({
     if (practiceSeconds <= 0) return;
 
     try {
-      await supabase.rpc('update_user_statistics', {
-        p_user_id: user.id,
-        p_watch_time: 0,
-        p_practice_time: practiceSeconds,
-        p_sentences_completed: 0,
-        p_words_learned: 0,
-        p_videos_watched: 0,
-        p_assessments: 1,
+      await learningApi.updateStatistics({
+        todayPracticeTime: practiceSeconds,
+        totalAssessments: 1,
       });
     } catch (error) {
       console.error('Failed to record practice time:', error);
@@ -208,49 +203,59 @@ export const ProfessionalAssessment = ({
       reader.readAsDataURL(audioBlob);
 
       reader.onloadend = async () => {
-        const base64Audio = reader.result as string;
-        const { data, error: funcError } = await supabase.functions.invoke('professional-assessment', {
-          body: {
-            audio_base64: base64Audio.split(',')[1],
-            original_text: originalText,
-          },
-        });
+        try {
+          const base64Audio = reader.result as string;
+          const data = await assessmentApi.evaluate(
+            originalText,
+            base64Audio.split(',')[1],
+            videoId
+          );
 
-        if (funcError) throw funcError;
+          // 检查是否计费成功
+          if (data.billed === false && data.error) {
+            // 评测失败，未计费
+            setError(data.message || data.error);
+            toast({
+              variant: 'destructive',
+              title: '评测失败',
+              description: `${data.message || data.error}`,
+            });
+          } else {
+            // 评测成功
+            setResult(data);
+            await refreshProfile();
 
-        // 检查是否计费成功
-        if (data.billed === false && data.error) {
-          // 评测失败，未计费
-          setError(data.message || data.error);
+            // 记录跟读练习时长
+            await recordPracticeTime();
+
+            if (data.billing_error) {
+              toast({
+                variant: 'default',
+                title: '评测完成',
+                description: data.billing_error,
+              });
+            } else {
+              toast({
+                title: '专业评测完成',
+                description: `总分: ${data.overall_score}分，已扣除${data.seconds_used}秒`,
+              });
+            }
+
+            if (onSuccess && data.overall_score) {
+              onSuccess(data.overall_score);
+            }
+          }
+        } catch (err: any) {
+          console.error('Assessment error:', err);
+          const message = err.response?.data?.error || err.message || '服务暂时不可用';
+          setError(`评测失败: ${message}`);
           toast({
             variant: 'destructive',
             title: '评测失败',
-            description: `${data.message || data.error}`,
+            description: message,
           });
-        } else {
-          // 评测成功
-          setResult(data);
-          await refreshProfile();
-
-          // 记录跟读练习时长
-          await recordPracticeTime();
-
-          if (data.billing_error) {
-            toast({
-              variant: 'default',
-              title: '评测完成',
-              description: data.billing_error,
-            });
-          } else {
-            toast({
-              title: '专业评测完成',
-              description: `总分: ${data.overall_score}分，已扣除${data.seconds_used}秒`,
-            });
-          }
-
-          if (onSuccess && data.overall_score) {
-            onSuccess(data.overall_score);
-          }
+        } finally {
+          setIsProcessing(false);
         }
       };
     } catch (err) {
@@ -261,7 +266,6 @@ export const ProfessionalAssessment = ({
         title: '评测失败',
         description: '服务暂时不可用，未扣除时间',
       });
-    } finally {
       setIsProcessing(false);
     }
   };

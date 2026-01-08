@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, Volume2, BookPlus, X } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { wordsApi, learningApi } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { lookupWord } from '@/lib/wordCache';
@@ -74,27 +74,16 @@ export const WordLookup = ({ word, context, contextTranslation, onClose }: WordL
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('word_book').insert({
-        user_id: user.id,
+      await wordsApi.addWord({
         word: wordInfo.word,
         phonetic: wordInfo.phonetic,
         translation: wordInfo.translation,
         context: '', // 用户要求不保存例句
       });
 
-      if (error) throw error;
-
       // 更新用户统计 - 新增生词
       try {
-        await supabase.rpc('update_user_statistics', {
-          p_user_id: user.id,
-          p_watch_time: 0,
-          p_practice_time: 0,
-          p_sentences_completed: 0,
-          p_words_learned: 1,
-          p_videos_watched: 0,
-          p_assessments: 0,
-        });
+        await learningApi.updateStatistics({ wordsLearned: 1 } as any);
       } catch (statsError) {
         console.error('Failed to update word statistics:', statsError);
       }

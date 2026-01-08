@@ -42,21 +42,26 @@
 
 ## 导入方式
 
-### 方式一：通过Edge Function导入
+### 方式一：通过 API 导入
 
-调用 `/functions/v1/import-dictionary` 接口：
+调用后端 API 接口：
 
 ```bash
 curl -X POST \
-  'https://your-project.supabase.co/functions/v1/import-dictionary' \
+  'http://localhost:3000/api/admin/import-dictionary' \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '{"dictionary": "cet4"}'
 ```
 
-### 方式二：通过SQL迁移导入
+### 方式二：通过 SQL 脚本导入
 
-在Supabase控制台执行 `seed-dictionaries.sql` 文件。
+在 SQLite 数据库中执行导入脚本：
+
+```bash
+cd backend
+npm run import:dict
+```
 
 ## 许可证
 

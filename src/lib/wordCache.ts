@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { wordsApi, translateApi } from '@/lib/api-client';
 
 interface CachedWord {
   word: string;
@@ -130,22 +130,24 @@ const sanitizeDefinitions = (defs: any[]) => {
 export const getFromDbCache = async (word: string) => {
   const variations = getWordVariations(word);
 
-  // 使用 in 查询一次性匹配所有变体
-  const { data, error } = await supabase
-    .from('word_cache')
-    .select('*')
-    .in('word', variations)
-    .limit(1); // 只要找到一个匹配的即可
+  // 依次尝试每个变体形式
+  for (const variation of variations) {
+    try {
+      const result = await wordsApi.getCachedWord(variation);
+      if (result) {
+        return {
+          word: result.word,
+          phonetic: result.phonetic || '',
+          translation: result.translation || '',
+          definitions: sanitizeDefinitions((result.definitions as any[]) || []),
+        };
+      }
+    } catch {
+      // 继续尝试下一个变体
+    }
+  }
 
-  if (error || !data || data.length === 0) return null;
-  const result = data[0];
-
-  return {
-    word: result.word,
-    phonetic: result.phonetic || '',
-    translation: result.translation || '',
-    definitions: sanitizeDefinitions((result.definitions as any[]) || []),
-  };
+  return null;
 };
 
 export const saveToDbCache = async (wordData: {
@@ -154,17 +156,17 @@ export const saveToDbCache = async (wordData: {
   translation: string;
   definitions: { partOfSpeech: string; definition: string; example?: string }[];
 }) => {
-  const { error } = await supabase.from('word_cache').upsert(
-    {
+  try {
+    await wordsApi.cacheWord({
       word: wordData.word.toLowerCase(),
       phonetic: wordData.phonetic,
       translation: wordData.translation,
       definitions: wordData.definitions,
-    },
-    { onConflict: 'word' }
-  );
-
-  return !error;
+    });
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 // 从 API 获取单词信息
@@ -198,54 +200,55 @@ export const fetchFromApi = async (word: string) => {
       console.warn('Free Dictionary API failed:', e);
     }
 
-    // 2. 获取中文翻译 / 补全信息 (AI / Edge Function)
-    const { data: translationData, error: translationError } = await supabase.functions.invoke('translate', {
-      body: { text: word.toLowerCase() },
-    });
+    // 2. 获取中文翻译 / 补全信息 (后端 API)
+    try {
+      const translationData = await translateApi.translate(word.toLowerCase(), 'en', 'zh');
 
-    if (!translationError && translationData) {
-      // 优先使用 AI 返回的中文翻译
-      if (translationData.translation) {
-        wordInfo.translation = translationData.translation;
-      }
-      // 如果缺少音标，使用 AI 返回的
-      if (!wordInfo.phonetic && translationData.phonetic) {
-        wordInfo.phonetic = translationData.phonetic;
-      }
-      // 如果缺少定义，或者想要补充中文定义，这里我们可以合并或优先展示中文
-      if (translationData.definitions && Array.isArray(translationData.definitions)) {
-        try {
-          console.log('Backend returned definitions:', translationData.definitions);
-          const backendDefs = translationData.definitions
-            .map((def: any) => {
-              if (!def) return null;
-              if (typeof def === 'string') {
+      if (translationData) {
+        // 优先使用 AI 返回的中文翻译
+        if (translationData.translation) {
+          wordInfo.translation = translationData.translation;
+        }
+        // 如果缺少音标，使用 AI 返回的
+        if (!wordInfo.phonetic && translationData.phonetic) {
+          wordInfo.phonetic = translationData.phonetic;
+        }
+        // 如果缺少定义，或者想要补充中文定义，这里我们可以合并或优先展示中文
+        if (translationData.definitions && Array.isArray(translationData.definitions)) {
+          try {
+            console.log('Backend returned definitions:', translationData.definitions);
+            const backendDefs = translationData.definitions
+              .map((def: any) => {
+                if (!def) return null;
+                if (typeof def === 'string') {
+                  return {
+                    partOfSpeech: translationData.partOfSpeech || 'unknown',
+                    definition: def,
+                    example: ''
+                  };
+                }
+                // Handle object format
                 return {
-                  partOfSpeech: translationData.partOfSpeech || 'unknown',
-                  definition: def,
-                  example: ''
+                  partOfSpeech: def.partOfSpeech || 'unknown',
+                  definition: def.definition || '',
+                  example: def.example || ''
                 };
-              }
-              // Handle object format
-              return {
-                partOfSpeech: def.partOfSpeech || 'unknown',
-                definition: def.definition || '',
-                example: def.example || ''
-              };
-            })
-            .filter((d: any) => d !== null); // Filter out nulls
+              })
+              .filter((d: any) => d !== null); // Filter out nulls
 
-          // Deduplicate based on definition text
-          const existingDefs = new Set(wordInfo.definitions.map(d => d.definition));
-          const newDefs = backendDefs.filter((d: any) => d && !existingDefs.has(d.definition));
+            // Deduplicate based on definition text
+            const existingDefs = new Set(wordInfo.definitions.map(d => d.definition));
+            const newDefs = backendDefs.filter((d: any) => d && !existingDefs.has(d.definition));
 
-          // Append unique backend definitions
-          wordInfo.definitions = [...wordInfo.definitions, ...newDefs];
-        } catch (err) {
-          console.error('Error processing backend definitions:', err);
+            // Append unique backend definitions
+            wordInfo.definitions = [...wordInfo.definitions, ...newDefs];
+          } catch (err) {
+            console.error('Error processing backend definitions:', err);
+          }
         }
       }
-    } else {
+    } catch (translationError) {
+      console.warn('Translation API failed:', translationError);
       // 3. Fallback: MyMemory API (Free, no key) if AI fails
       try {
         const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-CN`);

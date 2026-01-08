@@ -13,7 +13,7 @@ import {
   Volume2, VolumeX, RotateCcw,
   Repeat, Languages
 } from 'lucide-react';
-import { Subtitle } from '@/lib/supabase';
+import { Subtitle } from '@/lib/api-client';
 
 export interface VideoPlayerRef {
   seek: (time: number) => void;

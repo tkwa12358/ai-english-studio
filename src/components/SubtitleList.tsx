@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Subtitle } from '@/lib/supabase';
+import { Subtitle } from '@/lib/api-client';
 import { Play, Mic, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

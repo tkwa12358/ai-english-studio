@@ -1,64 +1,109 @@
-# AI English Club 安装部署文档
+# AI English Studio 安装部署文档
 
 ## 1. 项目简介
-AI English Club 是一个基于 React + Vite + Supabase 的英语学习平台，支持视频学习、单词本、发音评测等功能。
+AI English Studio 是一个基于 React + Vite + Express + SQLite 的英语学习平台，支持视频学习、单词本、发音评测等功能。
 
 ## 2. 环境要求
 - Node.js (建议 v18+)
 - npm 或 yarn
-- Supabase 账户及项目
+- Docker（可选，用于生产部署）
 
-## 3. 安装步骤
+## 3. 快速安装
 
 ### 3.1 克隆项目
 ```bash
-git clone git@github.com:tkwa12358/newenglish.git
-cd newenglish
+git clone git@github.com:tkwa12358/ai-english-studio.git
+cd ai-english-studio
 ```
 
 ### 3.2 安装依赖
 ```bash
+# 前端依赖
 npm install
+
+# 后端依赖
+cd backend && npm install && cd ..
 ```
 
 ### 3.3 配置环境变量
-在项目根目录创建 `.env` 文件，内容参考如下：
-```env
-VITE_SUPABASE_URL=你的Supabase项目URL
-VITE_SUPABASE_ANON_KEY=你的Supabase匿名Key
-```
-
-## 4. 数据库配置
-
-### 4.1 同步基础表结构
-项目使用 Supabase Migrations 管理表结构。在安装好 Supabase CLI 后，运行：
+复制 `.env.example` 文件为 `.env`：
 ```bash
-supabase link --project-ref 你的项目ID
-supabase db push
+cp .env.example .env
 ```
-或者手动将 `supabase/migrations` 下的 `.sql` 文件按时间顺序在 Supabase SQL Editor 中执行。
 
-### 4.2 导入单词词库
-词库文件位于 `data/dictionary` 目录下。
+编辑 `.env` 文件，根据需要修改配置。
 
-#### 方式一：使用 SQL 脚本导入（推荐）
-在 Supabase SQL Editor 中执行 `data/dictionary/sql/import_dict.sql` 中的内容。
-> 注意：SQL 文件较大，如果 SQL Editor 限制大小，请使用 `psql` 工具：
-> ```bash
-> psql -h db.xxxx.supabase.co -U postgres -d postgres -f data/dictionary/sql/import_dict.sql
-> ```
+## 4. 运行项目
 
-#### 方式二：使用 JSON 文件重新生成
-如果你需要修改导入逻辑，可以使用 `scripts/generate-dict-sql.cjs` 脚本：
-1. 修改脚本中的 `DICT_DIR` 为 `data/dictionary/json` 的绝对路径。
-2. 运行脚本：`node scripts/generate-dict-sql.cjs`
-3. 产生的 `import_dict.sql` 即可用于导入。
+### 4.1 开发模式
 
-## 5. 运行项目
+启动后端：
+```bash
+cd backend
+npm run dev
+```
+
+启动前端（新终端）：
 ```bash
 npm run dev
 ```
 
-## 6. 开发建议
-- 评测功能依赖于 Supabase Edge Functions，请确保本地配置了相应的 API Key（如 Azure Speech 或 腾讯 SOE）。
-- 离线字典缓存通过 `indexedDB` 实现，初次加载词库记录后会自动缓存。
+### 4.2 Docker 部署（推荐）
+
+一键启动所有服务：
+```bash
+docker-compose up -d --build
+```
+
+访问 http://localhost:3000
+
+## 5. 数据库
+
+项目使用 SQLite 数据库，数据文件存储在 `data/ai_english.db`。
+
+### 5.1 数据库初始化
+
+首次启动后端时会自动创建数据库结构。
+
+### 5.2 导入单词词库
+
+词库文件位于 `data/dictionary` 目录下。使用以下命令导入：
+
+```bash
+cd backend
+npm run import:dict
+```
+
+或手动执行 SQL：
+```bash
+sqlite3 ../data/ai_english.db < sql/init.sql
+```
+
+## 6. 管理员账号
+
+默认管理员账号：
+- **邮箱**: `admin@163.com`
+- **密码**: `admin@163.com`
+
+初始化管理员（如不存在）：
+```bash
+curl -X POST http://localhost:3000/api/admin/init
+```
+
+## 7. 开发建议
+
+- 评测功能依赖于外部 API（如腾讯 SOE），请在后端配置相应的 API Key
+- 离线字典缓存通过 `indexedDB` 实现，初次加载词库记录后会自动缓存
+- 开发时后端运行在 3001 端口，前端运行在 3000 端口
+- 生产环境使用 Docker Compose 统一部署
+
+## 8. 常见问题
+
+### Q: 后端启动失败
+A: 确保 `data` 目录存在且有写入权限。
+
+### Q: 登录失败
+A: 检查后端服务是否正常运行，确认 API 地址配置正确。
+
+### Q: 视频上传失败
+A: 检查 `uploads` 目录权限，确保有足够的磁盘空间。

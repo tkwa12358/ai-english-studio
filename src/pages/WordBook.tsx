@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
-import { supabase, WordBookEntry } from '@/lib/supabase';
+import { wordsApi, WordBookEntry } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,23 +20,24 @@ const WordBook = () => {
   }, [user]);
 
   const fetchWords = async () => {
-    const { data, error } = await supabase
-      .from('word_book')
-      .select('*')
-      .eq('user_id', user!.id)
-      .order('created_at', { ascending: false });
-    
-    if (!error && data) {
+    try {
+      const data = await wordsApi.getWords();
       setWords(data as WordBookEntry[]);
+    } catch (error) {
+      console.error('获取单词失败:', error);
+      toast({ title: '获取单词失败', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const deleteWord = async (id: string) => {
-    const { error } = await supabase.from('word_book').delete().eq('id', id);
-    if (!error) {
+    try {
+      await wordsApi.deleteWord(id);
       setWords(words.filter(w => w.id !== id));
       toast({ title: '已删除' });
+    } catch (error) {
+      toast({ title: '删除失败', variant: 'destructive' });
     }
   };
 
@@ -56,10 +57,10 @@ const WordBook = () => {
       <Helmet>
         <title>单词本 - AI English Club</title>
       </Helmet>
-      
+
       <div className="min-h-screen bg-background">
         <Header />
-        
+
         <main className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold">单词本</h1>

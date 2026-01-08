@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Copy, Check, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
+import { authCodesApi } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ActivationDialogProps {
@@ -59,48 +59,24 @@ export const ActivationDialog: React.FC<ActivationDialogProps> = ({
     setLoading(true);
 
     try {
-      // 验证授权码
-      const { data: codeData, error: codeError } = await supabase
-        .from('auth_codes')
-        .select('*')
-        .eq('code', code.trim())
-        .eq('code_type', 'registration')
-        .eq('is_used', false)
-        .single();
+      // 使用 API 兑换授权码
+      // authCodesApi.redeemCode 会处理所有类型的授权码，包括注册/激活码
+      const response = await authCodesApi.redeemCode(code.trim());
 
-      if (codeError || !codeData) {
-        toast({ title: '授权码无效或已被使用', variant: 'destructive' });
-        setLoading(false);
-        return;
-      }
-
-      // 检查授权码是否过期
-      if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
-        toast({ title: '授权码已过期', variant: 'destructive' });
-        setLoading(false);
-        return;
-      }
-
-      // 标记授权码已使用
-      const { error: updateError } = await supabase
-        .from('auth_codes')
-        .update({
-          is_used: true,
-          used_by: user.id,
-          used_at: new Date().toISOString(),
-        })
-        .eq('code', code.trim());
-
-      if (updateError) {
-        toast({ title: '激活失败', description: updateError.message, variant: 'destructive' });
-        setLoading(false);
-        return;
-      }
-
-      toast({ title: '激活成功', description: '您的账号已激活，可以继续使用所有功能' });
+      // 如果兑换成功，后端会返回成功信息
+      toast({
+        title: '激活成功',
+        description: response.message || '您的账号已激活，可以继续使用所有功能'
+      });
       onActivated();
-    } catch (e) {
-      toast({ title: '激活失败', variant: 'destructive' });
+    } catch (error: any) {
+      console.error('Activation error:', error);
+      const errorMessage = error.response?.data?.error || error.message || '激活失败，请检查授权码';
+      toast({
+        title: '激活失败',
+        description: errorMessage,
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }

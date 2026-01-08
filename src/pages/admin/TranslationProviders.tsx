@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Languages, Star } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { translateApi, TranslationProvider } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,18 +39,6 @@ const PROVIDER_TYPES = [
     { value: 'google', label: 'Google 翻译', description: '支持语言最丰富，需要配置代理' },
     { value: 'microsoft', label: '微软翻译', description: 'Azure 认知服务，适合企业级应用' },
 ];
-
-interface TranslationProvider {
-    id: string;
-    name: string;
-    provider_type: 'baidu' | 'tencent' | 'google' | 'microsoft';
-    app_id: string | null;
-    api_key: string; // 注意：从 API 获取时可能显示为掩码或空
-    api_secret: string | null;
-    is_active: boolean;
-    is_default: boolean;
-    created_at: string;
-}
 
 const TranslationProviders: React.FC = () => {
     const { toast } = useToast();
@@ -69,33 +57,21 @@ const TranslationProviders: React.FC = () => {
     const { data: providers = [] } = useQuery({
         queryKey: ['translation-providers'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('translation_providers')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            return data as TranslationProvider[];
+            const data = await translateApi.getProviders();
+            return data;
         },
     });
 
     const createMutation = useMutation({
         mutationFn: async (data: typeof formData) => {
-            // 检查是否已有默认提供商
-            if (providers.length === 0) {
-                // 第一个自动设为默认
-            }
-
-            const { error } = await supabase.from('translation_providers').insert([{
+            await translateApi.createProvider({
                 name: data.name,
-                provider_type: data.provider_type,
-                app_id: data.app_id || null,
-                api_key: data.api_key,
-                api_secret: data.api_secret || null,
-                is_active: data.is_active,
-                is_default: providers.length === 0, // 如果是第一个，设为默认
-            }]);
-            if (error) throw error;
+                providerType: data.provider_type,
+                appId: data.app_id || undefined,
+                apiKey: data.api_key,
+                apiSecret: data.api_secret || undefined,
+                isDefault: providers.length === 0,
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['translation-providers'] });
@@ -103,29 +79,21 @@ const TranslationProviders: React.FC = () => {
             setIsOpen(false);
             resetForm();
         },
-        onError: (error) => {
+        onError: (error: any) => {
             toast({ title: '创建失败', description: error.message, variant: 'destructive' });
         },
     });
 
     const updateMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-            const updateData: any = {
+            await translateApi.updateProvider(id, {
                 name: data.name,
-                provider_type: data.provider_type,
-                app_id: data.app_id || null,
-                is_active: data.is_active,
-            };
-
-            // 只有在输入框不为空时才更新密钥
-            if (data.api_key) updateData.api_key = data.api_key;
-            if (data.api_secret) updateData.api_secret = data.api_secret;
-
-            const { error } = await supabase
-                .from('translation_providers')
-                .update(updateData)
-                .eq('id', id);
-            if (error) throw error;
+                providerType: data.provider_type,
+                appId: data.app_id || undefined,
+                apiKey: data.api_key || undefined,
+                apiSecret: data.api_secret || undefined,
+                isActive: data.is_active,
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['translation-providers'] });
@@ -133,46 +101,27 @@ const TranslationProviders: React.FC = () => {
             setIsOpen(false);
             resetForm();
         },
-        onError: (error) => {
+        onError: (error: any) => {
             toast({ title: '更新失败', description: error.message, variant: 'destructive' });
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase.from('translation_providers').delete().eq('id', id);
-            if (error) throw error;
+            await translateApi.deleteProvider(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['translation-providers'] });
             toast({ title: '已删除' });
         },
-        onError: (error) => {
+        onError: (error: any) => {
             toast({ title: '删除失败', description: error.message, variant: 'destructive' });
         },
     });
 
     const setDefaultMutation = useMutation({
         mutationFn: async (id: string) => {
-            // 先取消所有默认
-            await supabase
-                .from('translation_providers')
-                .update({ is_default: false })
-                .neq('id', id); // 这是一个优化，但在 Supabase 中可能需要 separate query 或者不加条件更新所有
-
-            // 这里简单处理：先全部设为 false (client side update or two queries)
-            // 安全起见，先更新所有为 false
-            await supabase
-                .from('translation_providers')
-                .update({ is_default: false })
-                .gt('created_at', '1970-01-01'); // Hack to update all
-
-            // 设置新默认
-            const { error } = await supabase
-                .from('translation_providers')
-                .update({ is_default: true })
-                .eq('id', id);
-            if (error) throw error;
+            await translateApi.setDefaultProvider(id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['translation-providers'] });
