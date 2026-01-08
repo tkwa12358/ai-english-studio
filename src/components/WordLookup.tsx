@@ -167,16 +167,7 @@ export const WordLookup = ({ word, context, contextTranslation, onClose }: WordL
               </div>
             )}
 
-            {/* 上下文参考 */}
-            {context && (
-              <div className="border-t border-border pt-3 mt-3">
-                <p className="text-xs text-muted-foreground mb-1">📝 上下文参考</p>
-                <p className="text-sm text-foreground/80 italic">{context}</p>
-                {contextTranslation && (
-                  <p className="text-sm text-primary mt-1">→ {contextTranslation}</p>
-                )}
-              </div>
-            )}
+            {/* 上下文参考已移除 - 仅显示词库或API返回的内容 */}
 
             <Button
               className="w-full mt-4"

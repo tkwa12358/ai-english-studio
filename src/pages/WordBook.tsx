@@ -100,7 +100,7 @@ const WordBook = () => {
                       </Button>
                     </div>
                     {word.translation && <p className="text-sm">{word.translation}</p>}
-                    {word.context && <p className="text-xs text-muted-foreground italic mt-1 truncate">{word.context}</p>}
+                    {/* context 例句已移除 - 用户要求不显示项目中的句子 */}
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => deleteWord(word.id)}>
                     <Trash2 className="w-4 h-4" />
