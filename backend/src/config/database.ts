@@ -18,6 +18,10 @@ if (!fs.existsSync(dataDir)) {
 // 数据库实例
 let db: Database | null = null;
 
+// 保存节流控制
+let saveTimeout: NodeJS.Timeout | null = null;
+let pendingSave = false;
+
 // 初始化数据库
 export async function initDatabase(): Promise<void> {
   const SQL = await initSqlJs();
@@ -36,22 +40,87 @@ export async function initDatabase(): Promise<void> {
     throw new Error('Failed to initialize database');
   }
 
-  // 启用外键
+  // 启用外键和性能优化
   db.run('PRAGMA foreign_keys = ON');
+  db.run('PRAGMA synchronous = NORMAL');     // 平衡安全性和性能
+  db.run('PRAGMA cache_size = -64000');       // 64MB 缓存
+  db.run('PRAGMA temp_store = MEMORY');       // 临时表使用内存
+  db.run('PRAGMA mmap_size = 268435456');     // 256MB 内存映射
 
   // 创建表
   createTables();
 
+  // 创建索引
+  createIndexes();
+
   // 保存数据库
   saveDatabase();
+
+  console.log('✅ SQLite optimizations applied');
 }
 
-// 保存数据库到文件
+// 保存数据库到文件（立即保存）
 function saveDatabase(): void {
   if (!db) return;
   const data = db.export();
   const buffer = Buffer.from(data);
   fs.writeFileSync(dbPath, buffer);
+}
+
+// 延迟保存数据库（节流，避免频繁 I/O）
+function saveDatabaseThrottled(): void {
+  if (!db) return;
+  pendingSave = true;
+
+  if (!saveTimeout) {
+    saveTimeout = setTimeout(() => {
+      if (pendingSave) {
+        saveDatabase();
+        pendingSave = false;
+      }
+      saveTimeout = null;
+    }, 1000); // 1秒后保存
+  }
+}
+
+// 强制保存（用于批量操作后）
+export function flushDatabase(): void {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+  }
+  if (pendingSave || db) {
+    saveDatabase();
+    pendingSave = false;
+  }
+}
+
+// 创建索引
+function createIndexes(): void {
+  if (!db) return;
+
+  // word_cache 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_word_cache_word ON word_cache(word)');
+
+  // word_book 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_word_book_user ON word_book(user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_word_book_word ON word_book(word)');
+
+  // learning_progress 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_learning_progress_user ON learning_progress(user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_learning_progress_video ON learning_progress(video_id)');
+
+  // videos 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_videos_category ON videos(category_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_videos_published ON videos(is_published)');
+
+  // user_sessions 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token)');
+
+  // auth_codes 索引
+  db.run('CREATE INDEX IF NOT EXISTS idx_auth_codes_code ON auth_codes(code)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_auth_codes_used ON auth_codes(is_used)');
 }
 
 // 创建所有表
@@ -361,7 +430,7 @@ export function queryOne<T = any>(sql: string, params: any[] = []): T | undefine
 export function run(sql: string, params: any[] = []): void {
   if (!db) throw new Error('Database not initialized');
   db.run(sql, params);
-  saveDatabase();
+  saveDatabaseThrottled();
 }
 
 export function insert(sql: string, params: any[] = []): void {
@@ -372,9 +441,78 @@ export function update(sql: string, params: any[] = []): number {
   if (!db) throw new Error('Database not initialized');
   db.run(sql, params);
   const changes = db.getRowsModified();
-  saveDatabase();
+  saveDatabaseThrottled();
   return changes;
+}
+
+/**
+ * 批量执行 SQL 操作（使用事务）
+ * 适用于大量数据导入，避免频繁磁盘 I/O
+ */
+export function runBatch(operations: Array<{ sql: string; params: any[] }>): number {
+  if (!db) throw new Error('Database not initialized');
+
+  let executed = 0;
+
+  db.run('BEGIN TRANSACTION');
+  try {
+    for (const op of operations) {
+      db.run(op.sql, op.params);
+      executed++;
+    }
+    db.run('COMMIT');
+
+    // 批量操作后立即保存
+    saveDatabase();
+
+    return executed;
+  } catch (error) {
+    db.run('ROLLBACK');
+    throw error;
+  }
+}
+
+/**
+ * 批量 UPSERT 单词到缓存（优化的词库导入）
+ */
+export function batchUpsertWords(words: Array<{
+  id: string;
+  word: string;
+  phonetic?: string | null;
+  translation?: string | null;
+  definitions?: any[];
+}>): number {
+  if (!db) throw new Error('Database not initialized');
+
+  let count = 0;
+
+  db.run('BEGIN TRANSACTION');
+  try {
+    for (const w of words) {
+      db.run(
+        `INSERT INTO word_cache (id, word, phonetic, translation, definitions)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(word) DO UPDATE SET
+           phonetic = COALESCE(excluded.phonetic, word_cache.phonetic),
+           translation = COALESCE(excluded.translation, word_cache.translation),
+           definitions = COALESCE(excluded.definitions, word_cache.definitions),
+           updated_at = datetime('now')`,
+        [w.id, w.word.toLowerCase(), w.phonetic || null, w.translation || null, JSON.stringify(w.definitions || [])]
+      );
+      count++;
+    }
+    db.run('COMMIT');
+
+    // 批量操作后立即保存
+    saveDatabase();
+
+    return count;
+  } catch (error) {
+    db.run('ROLLBACK');
+    throw error;
+  }
 }
 
 export { db };
 export default db;
+

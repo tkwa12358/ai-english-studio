@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet-async';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -180,6 +181,9 @@ const AdminDictionary: React.FC = () => {
 
   return (
     <AdminLayout>
+      <Helmet>
+        <title>词库管理 - 管理后台</title>
+      </Helmet>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>

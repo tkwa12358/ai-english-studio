@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query, queryOne, run, update } from '../config/database';
+import { query, queryOne, run, update, batchUpsertWords } from '../config/database';
 import { authMiddleware } from '../middleware/auth';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -347,36 +347,39 @@ router.post('/import-dictionary', authMiddleware, async (req: Request, res: Resp
 });
 
 /**
- * 从文件导入词库
+ * 从文件导入词库（使用批量事务优化）
  */
 async function importDictionaryFile(filePath: string): Promise<number> {
     const content = fs.readFileSync(filePath, 'utf-8');
     const words = JSON.parse(content);
-    let imported = 0;
+
+    // 准备批量导入数据
+    const wordsToImport: Array<{
+        id: string;
+        word: string;
+        phonetic: string | null;
+        translation: string | null;
+        definitions: any[];
+    }> = [];
 
     for (const w of words) {
-        if (w.word) {
-            try {
-                const existing = queryOne('SELECT id FROM word_cache WHERE word = ?', [w.word.toLowerCase()]);
-                if (existing) {
-                    update(
-                        `UPDATE word_cache SET phonetic = ?, translation = ?, definitions = ?, updated_at = datetime('now') WHERE word = ?`,
-                        [w.phonetic || null, w.translation || null, JSON.stringify(w.definitions || []), w.word.toLowerCase()]
-                    );
-                } else {
-                    run(
-                        `INSERT INTO word_cache (id, word, phonetic, translation, definitions) VALUES (?, ?, ?, ?, ?)`,
-                        [uuidv4(), w.word.toLowerCase(), w.phonetic || null, w.translation || null, JSON.stringify(w.definitions || [])]
-                    );
-                }
-                imported++;
-            } catch (e) {
-                // 忽略单个错误
-            }
+        if (w.word && typeof w.word === 'string') {
+            wordsToImport.push({
+                id: uuidv4(),
+                word: w.word,
+                phonetic: w.phonetic || null,
+                translation: w.translation || null,
+                definitions: w.definitions || []
+            });
         }
     }
 
-    return imported;
+    // 使用批量事务导入
+    if (wordsToImport.length > 0) {
+        return batchUpsertWords(wordsToImport);
+    }
+
+    return 0;
 }
 
 /**
