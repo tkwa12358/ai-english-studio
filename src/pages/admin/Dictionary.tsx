@@ -145,15 +145,18 @@ const AdminDictionary: React.FC = () => {
     try {
       const result = await wordsApi.importDictionary('all', 'import-all');
 
+      const uniqueWords = result.uniqueWords || result.totalImported || 0;
+      const processed = result.totalProcessed || result.totalImported || 0;
+
       setImportStatus(prev => ({
         ...prev,
         progress: 100,
-        message: `所有词库导入完成! 共 ${result.totalImported || 0} 个单词`
+        message: `导入完成! 数据库共 ${uniqueWords.toLocaleString()} 个唯一单词`
       }));
 
       toast({
         title: '导入成功',
-        description: `所有词库已成功导入，共 ${result.totalImported || 0} 个单词`,
+        description: `处理 ${processed.toLocaleString()} 条记录，去重后共 ${uniqueWords.toLocaleString()} 个唯一单词`,
       });
 
       await fetchStats();

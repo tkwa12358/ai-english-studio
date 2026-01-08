@@ -304,21 +304,26 @@ router.post('/import-dictionary', authMiddleware, async (req: Request, res: Resp
 
         // 如果是导入全部
         if (action === 'import-all' || dictionary === 'all') {
-            let totalImported = 0;
+            let totalProcessed = 0;
             const results: any[] = [];
 
             for (const [key, config] of Object.entries(DICTIONARY_CONFIG)) {
                 const filePath = path.join(dictDir, `${key}.json`);
                 if (fs.existsSync(filePath)) {
                     const imported = await importDictionaryFile(filePath);
-                    totalImported += imported;
-                    results.push({ dictionary: key, name: config.name, imported });
+                    totalProcessed += imported;
+                    results.push({ dictionary: key, name: config.name, processed: imported });
                 }
             }
 
+            // 查询数据库中实际的唯一单词数
+            const dbStats = queryOne<any>('SELECT COUNT(*) as count FROM word_cache');
+            const uniqueWords = dbStats?.count || 0;
+
             return res.json({
-                message: `成功导入 ${totalImported} 个单词`,
-                totalImported,
+                message: `处理完成！共处理 ${totalProcessed} 条记录，数据库中有 ${uniqueWords} 个唯一单词`,
+                totalProcessed,
+                uniqueWords,
                 results
             });
         }
