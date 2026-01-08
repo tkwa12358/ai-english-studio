@@ -217,8 +217,14 @@ const AdminVideos: React.FC = () => {
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       await videosApi.createVideo({
-        ...data,
-        category_id: data.category_id || null,
+        title: data.title,
+        description: data.description,
+        videoUrl: data.video_url,
+        thumbnailUrl: data.thumbnail_url,
+        categoryId: data.category_id || null,
+        subtitlesEn: data.subtitles_en,
+        subtitlesCn: data.subtitles_cn,
+        isPublished: data.is_published,
       });
     },
     onSuccess: () => {
@@ -235,8 +241,14 @@ const AdminVideos: React.FC = () => {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
       await videosApi.updateVideo(id, {
-        ...data,
-        category_id: data.category_id || null,
+        title: data.title,
+        description: data.description,
+        videoUrl: data.video_url,
+        thumbnailUrl: data.thumbnail_url,
+        categoryId: data.category_id || null,
+        subtitlesEn: data.subtitles_en,
+        subtitlesCn: data.subtitles_cn,
+        isPublished: data.is_published,
       });
     },
     onSuccess: () => {
