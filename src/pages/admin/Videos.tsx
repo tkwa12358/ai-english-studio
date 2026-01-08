@@ -378,7 +378,7 @@ const AdminVideos: React.FC = () => {
                             try {
                               // 1. Upload Video using API
                               const videoResult = await videosApi.uploadVideo(file);
-                              const videoUrl = videoResult.url;
+                              const videoUrl = videoResult.videoUrl;
 
                               // 2. Generate and Upload Thumbnail
                               toast({ title: '视频上传成功', description: '正在生成封面图...' });
@@ -389,7 +389,7 @@ const AdminVideos: React.FC = () => {
                                 const thumbFile = new File([thumbBlob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
 
                                 const thumbResult = await videosApi.uploadThumbnail(thumbFile);
-                                thumbnailUrl = thumbResult.url;
+                                thumbnailUrl = thumbResult.thumbnailUrl;
                               } catch (thumbErr) {
                                 console.error('Thumbnail generation failed', thumbErr);
                                 toast({ title: '封面生成失败', description: '请稍后重试或忽略', variant: 'destructive' });
@@ -447,7 +447,7 @@ const AdminVideos: React.FC = () => {
 
                                         const thumbResult = await videosApi.uploadThumbnail(thumbFile);
 
-                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
+                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.thumbnailUrl }));
                                         toast({ title: '封面已重新生成' });
                                       } catch (err: any) {
                                         toast({ title: '生成失败', description: err.message, variant: 'destructive' });
@@ -478,7 +478,7 @@ const AdminVideos: React.FC = () => {
                                       setUploadingThumbnail(true);
                                       try {
                                         const thumbResult = await videosApi.uploadThumbnail(file);
-                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
+                                        setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.thumbnailUrl }));
                                         toast({ title: '封面已上传' });
                                       } catch (err: any) {
                                         toast({ title: '上传失败', description: err.message, variant: 'destructive' });
@@ -510,7 +510,7 @@ const AdminVideos: React.FC = () => {
 
                                       const thumbResult = await videosApi.uploadThumbnail(thumbFile);
 
-                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
+                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.thumbnailUrl }));
                                       toast({ title: '封面已生成' });
                                     } catch (err: any) {
                                       toast({ title: '生成失败', description: err.message, variant: 'destructive' });
@@ -541,7 +541,7 @@ const AdminVideos: React.FC = () => {
                                     setUploadingThumbnail(true);
                                     try {
                                       const thumbResult = await videosApi.uploadThumbnail(file);
-                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.url }));
+                                      setFormData(prev => ({ ...prev, thumbnail_url: thumbResult.thumbnailUrl }));
                                       toast({ title: '封面已上传' });
                                     } catch (err: any) {
                                       toast({ title: '上传失败', description: err.message, variant: 'destructive' });
